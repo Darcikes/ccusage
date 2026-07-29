@@ -13,7 +13,8 @@ use crate::fast::FxHashMap;
 
 const BUILD_TIME_PRICING_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/litellm-pricing.json"));
-const BUILD_TIME_MODELS_DEV_JSON: &str = include_str!("models-dev-pricing.json");
+const BUILD_TIME_MODELS_DEV_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/models-dev-pricing.json"));
 const FAST_MULTIPLIER_OVERRIDES_JSON: &str = include_str!("fast-multiplier-overrides.json");
 const LITELLM_PRICING_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";

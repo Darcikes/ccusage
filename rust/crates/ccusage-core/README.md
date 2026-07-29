@@ -20,7 +20,9 @@ neither has a consumer outside it.
 `build.rs` compacts the pinned LiteLLM snapshot into the binary. It reads
 `CCUSAGE_PRICING_JSON_PATH`, which every Nix build and the dev shell set; the
 `fetch-litellm-pricing` feature adds the HTTPS download that plain
-`cargo build` needs on platforms Nix cannot target.
+`cargo build` needs on platforms Nix cannot target. It also minifies the
+committed models.dev snapshot on the way in, so that file can stay indented for
+reviewable regeneration diffs without shipping the indentation.
 
 ## Depends on
 

@@ -6,6 +6,8 @@ const FLAKE_LOCK_JSON: &str = "../../../flake.lock";
 #[cfg(feature = "fetch-litellm-pricing")]
 const LITELLM_PRICING_JSON: &str = "model_prices_and_context_window.json";
 const OUT_PRICING_JSON: &str = "litellm-pricing.json";
+const MODELS_DEV_PRICING_JSON: &str = "src/models-dev-pricing.json";
+const OUT_MODELS_DEV_PRICING_JSON: &str = "models-dev-pricing.json";
 const PRICING_JSON_PATH_ENV: &str = "CCUSAGE_PRICING_JSON_PATH";
 #[cfg(feature = "fetch-litellm-pricing")]
 const PRICING_FETCH_TIMEOUT_SECONDS: u64 = 10;
@@ -25,6 +27,24 @@ fn main() {
     let pricing_json = compact_pricing_json(&pricing_json).expect("compact LiteLLM pricing JSON");
 
     fs::write(out_path, pricing_json).expect("write build-time pricing snapshot");
+
+    minify_models_dev_pricing_json();
+}
+
+/// The committed models.dev snapshot stays indented so its regeneration diffs
+/// stay reviewable, but it is embedded verbatim, so the indentation would ship
+/// in the binary. Strip it on the way in.
+fn minify_models_dev_pricing_json() {
+    println!("cargo:rerun-if-changed={MODELS_DEV_PRICING_JSON}");
+    let snapshot = fs::read_to_string(MODELS_DEV_PRICING_JSON)
+        .expect("read committed models.dev pricing snapshot");
+    let value =
+        serde_json::from_str::<Value>(&snapshot).expect("parse models.dev pricing snapshot");
+    fs::write(
+        out_dir_path(OUT_MODELS_DEV_PRICING_JSON),
+        serde_json::to_string(&value).expect("serialize models.dev pricing snapshot"),
+    )
+    .expect("write build-time models.dev pricing snapshot");
 }
 
 fn out_dir_path(file_name: &str) -> PathBuf {
