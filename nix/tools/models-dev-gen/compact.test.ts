@@ -5,7 +5,7 @@ import {
 	formatDuplicateModelsDevPricingKeyWarning,
 	isEmbeddableModelsDevCandidate,
 	isPriceableModelsDevCost,
-	isTextOutputModel,
+	isTokenPricedModel,
 	MODELS_DEV_PROVIDER_TRUST,
 	modelsDevProviderTrust,
 	modelsDevProviderTrustArtifact,
@@ -13,18 +13,26 @@ import {
 	selectModelsDevPricingKey,
 } from './compact.ts';
 
-const index = buildModelsDevCatalogIndex([
-	'anthropic/claude-opus-5',
-	'anthropic/claude-3-5-haiku-20241022',
-	'moonshotai/kimi-k2.7-code',
-	'xai/grok-build-0.1',
-	'zhipuai/glm-5-turbo',
-]);
+const index = buildModelsDevCatalogIndex({
+	'anthropic/claude-opus-5': { modalities: { input: ['text', 'image', 'pdf'], output: ['text'] } },
+	'anthropic/claude-3-5-haiku-20241022': { modalities: { input: ['text'], output: ['text'] } },
+	'moonshotai/kimi-k2.7-code': {
+		modalities: { input: ['text', 'image', 'video'], output: ['text'] },
+	},
+	'xai/grok-build-0.1': { modalities: { input: ['text', 'image'], output: ['text'] } },
+	'zhipuai/glm-5-turbo': { modalities: { input: ['text'], output: ['text'] } },
+	'openai/whisper-large-v3': { modalities: { input: ['audio'], output: ['text'] } },
+	'google/gemini-2.5-flash-image': {
+		modalities: { input: ['text', 'image'], output: ['text', 'image'] },
+	},
+});
 
 void it('indexes authoring providers and bare model ids from the catalog keys', () => {
 	assert.deepEqual([...index.authorProviderIds].sort(), [
 		'anthropic',
+		'google',
 		'moonshotai',
+		'openai',
 		'xai',
 		'zhipuai',
 	]);
@@ -187,16 +195,72 @@ void it('rejects flat-fee catalogs that publish all-zero token costs', () => {
 	assert.equal(isPriceableModelsDevCost({ input: 1, output: 2 }), true);
 });
 
-void it('accepts only models that bill per output text token', () => {
-	assert.equal(isTextOutputModel(undefined), true);
-	assert.equal(isTextOutputModel({ output: ['text'] }), true);
-	assert.equal(isTextOutputModel({ output: ['image'] }), false);
-	assert.equal(isTextOutputModel({ output: ['text', 'image'] }), false);
+void it('accepts chat models whose audio and video inputs are tokenised', () => {
+	// kimi-k2.7-code takes video input and gemini takes audio, both billed per
+	// token, so a non-text input modality cannot disqualify a model on its own.
+	assert.equal(
+		isTokenPricedModel({ sourceModelId: 'claude-opus-5', modalities: undefined, index }),
+		true,
+	);
+	assert.equal(
+		isTokenPricedModel({ sourceModelId: 'kimi-k2.7-code', modalities: undefined, index }),
+		true,
+	);
+	assert.equal(
+		isTokenPricedModel({ sourceModelId: 'unlisted-model', modalities: undefined, index }),
+		true,
+	);
+});
+
+void it('rejects duration-priced models however the serving catalog describes them', () => {
+	// whisper-large-v3 accepts no text at all and prices per second, but the
+	// catalogs serving it advertise text output, so its rate would read as a token
+	// rate.
+	assert.equal(
+		isTokenPricedModel({
+			sourceModelId: 'whisper-large-v3',
+			modalities: { input: ['audio'], output: ['text'] },
+			index,
+		}),
+		false,
+	);
+});
+
+void it('rejects image-output models a reseller catalog describes as text-only', () => {
+	// google authors gemini-2.5-flash-image with image output; 302ai lists the same
+	// model as text-only, which would embed a per-image rate as an output rate.
+	assert.equal(
+		isTokenPricedModel({
+			sourceModelId: 'gemini-2.5-flash-image',
+			modalities: { input: ['text', 'image'], output: ['text'] },
+			index,
+		}),
+		false,
+	);
+});
+
+void it('falls back to the serving catalog for models the authored catalog omits', () => {
+	assert.equal(
+		isTokenPricedModel({
+			sourceModelId: 'us.anthropic.claude-opus-5',
+			modalities: { input: ['text', 'image'], output: ['text'] },
+			index,
+		}),
+		true,
+	);
+	assert.equal(
+		isTokenPricedModel({
+			sourceModelId: 'some-tts-model',
+			modalities: { input: ['text'], output: ['audio'] },
+			index,
+		}),
+		false,
+	);
 });
 
 void it('exports sorted provider trust lists for the runtime loader', () => {
 	assert.deepEqual(modelsDevProviderTrustArtifact(index), {
-		owners: ['anthropic', 'moonshotai', 'xai', 'zai', 'zhipuai'],
+		owners: ['anthropic', 'google', 'moonshotai', 'openai', 'xai', 'zai', 'zhipuai'],
 		platforms: [
 			'amazon-bedrock',
 			'azure',

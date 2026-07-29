@@ -1152,15 +1152,6 @@
 			"context": 1048576
 		}
 	},
-	"gemini-2.5-flash-image": {
-		"cost": {
-			"input": 0.3,
-			"output": 30
-		},
-		"limit": {
-			"context": 32768
-		}
-	},
 	"gemini-2.5-flash-lite": {
 		"cost": {
 			"cache_read": 0.01,
@@ -1189,15 +1180,6 @@
 		},
 		"limit": {
 			"context": 1048576
-		}
-	},
-	"gemini-3-pro-image-preview": {
-		"cost": {
-			"input": 2,
-			"output": 120
-		},
-		"limit": {
-			"context": 32768
 		}
 	},
 	"gemini-3-pro-preview": {
@@ -1837,6 +1819,7 @@
 	},
 	"gpt-5.1-chat-latest": {
 		"cost": {
+			"cache_read": 0.12500000000000003,
 			"input": 1.25,
 			"output": 10
 		},
@@ -3506,15 +3489,6 @@
 			"context": 131072
 		}
 	},
-	"qwen3-asr-flash": {
-		"cost": {
-			"input": 0.035,
-			"output": 0.035
-		},
-		"limit": {
-			"context": 53248
-		}
-	},
 	"qwen3-coder-30b-a3b-instruct": {
 		"cost": {
 			"input": 0.45,
@@ -4040,15 +4014,6 @@
 		},
 		"limit": {
 			"context": 3500000
-		}
-	},
-	"whisper-large-v3": {
-		"cost": {
-			"input": 0.003,
-			"output": 0
-		},
-		"limit": {
-			"context": 0
 		}
 	},
 	"writer.palmyra-x4-v1:0": {

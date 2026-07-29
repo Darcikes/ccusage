@@ -51,6 +51,11 @@ const FIRST_PARTY_PROVIDER_ID_ALIASES = [
 	'zai',
 ] as const satisfies readonly string[];
 
+export type ModelsDevModalities = {
+	input?: readonly string[];
+	output?: readonly string[];
+};
+
 /**
  * Index of the canonical `models/<author>/<id>.toml` catalog, used to decide
  * which provider authored a model without hardcoding a provider list.
@@ -62,6 +67,8 @@ export type ModelsDevCatalogIndex = {
 	authorProviderIds: ReadonlySet<string>;
 	/** The same keys with the author prefix stripped. */
 	authoredModelIds: ReadonlySet<string>;
+	/** Authored modalities by bare model id. */
+	authoredModalities: ReadonlyMap<string, ModelsDevModalities>;
 };
 
 export type ModelsDevPricingCandidate = {
@@ -74,26 +81,37 @@ export type ModelsDevPricingCandidate = {
 };
 
 /**
- * Build the authorship index from the canonical catalog keys.
+ * Build the authorship index from the canonical catalog.
  *
- * @param authoredModelKeys - `<author>/<id>` keys from `generateCatalog().models`.
+ * @param authoredModels - `<author>/<id>` keyed models from `generateCatalog().models`.
  * @example
- * const index = buildModelsDevCatalogIndex(['anthropic/claude-opus-5']);
+ * const index = buildModelsDevCatalogIndex({ 'anthropic/claude-opus-5': {} });
  * index.authorProviderIds.has('anthropic'); // true
  */
 export function buildModelsDevCatalogIndex(
-	authoredModelKeys: readonly string[],
+	authoredModels: Readonly<Record<string, { modalities?: ModelsDevModalities }>>,
 ): ModelsDevCatalogIndex {
 	const authorProviderIds = new Set<string>();
 	const authoredModelIds = new Set<string>();
-	for (const key of authoredModelKeys) {
+	const authoredModalities = new Map<string, ModelsDevModalities>();
+	for (const [key, model] of Object.entries(authoredModels)) {
 		const separator = key.indexOf('/');
-		if (separator > 0) {
-			authorProviderIds.add(key.slice(0, separator));
-			authoredModelIds.add(key.slice(separator + 1));
+		if (separator <= 0) {
+			continue;
+		}
+		const modelId = key.slice(separator + 1);
+		authorProviderIds.add(key.slice(0, separator));
+		authoredModelIds.add(modelId);
+		if (model.modalities != null) {
+			authoredModalities.set(modelId, model.modalities);
 		}
 	}
-	return { authoredKeys: new Set(authoredModelKeys), authorProviderIds, authoredModelIds };
+	return {
+		authoredKeys: new Set(Object.keys(authoredModels)),
+		authorProviderIds,
+		authoredModelIds,
+		authoredModalities,
+	};
 }
 
 /**
@@ -185,12 +203,43 @@ export function isPriceableModelsDevCost<
 }
 
 /**
- * Whether a model bills per text token, so its cost block fits the embedded
- * shape. Image, audio, and video models price per asset instead.
+ * Whether a model bills per text token, so the embedded `input` and `output`
+ * rates mean what the runtime assumes when it multiplies them by token counts.
+ *
+ * Two signals, both read off the modalities:
+ *
+ * - Output must be text only. An image or audio output rate is per asset, so
+ *   `gemini-2.5-flash-image`'s 30 USD output rate is per image, not per Mtok.
+ * - Input must accept text. A model that accepts no text is a transcription or
+ *   vision-only endpoint billed by duration - `whisper-large-v3` accepts audio
+ *   alone and prices per second. Accepting audio, video, image or PDF *as well
+ *   as* text is normal for chat models and is tokenised, so it stays eligible.
+ *
+ * The authored catalog decides, not the catalog being read. Reseller catalogs
+ * describe the same model less carefully, and one claiming text-only output for
+ * an image model would otherwise smuggle a per-image rate into the snapshot.
+ *
+ * @example
+ * // authored as input: ["audio"], so excluded whichever catalog serves it
+ * isTokenPricedModel({ sourceModelId: 'whisper-large-v3', modalities: { output: ['text'] }, index });
+ * // false
  */
-export function isTextOutputModel(modalities: { output?: readonly string[] } | undefined): boolean {
-	const output = modalities?.output ?? ['text'];
-	return output.length === 1 && output[0] === 'text';
+export function isTokenPricedModel({
+	sourceModelId,
+	modalities,
+	index,
+}: {
+	sourceModelId: string;
+	modalities: ModelsDevModalities | undefined;
+	index: ModelsDevCatalogIndex;
+}): boolean {
+	const authoritative = index.authoredModalities.get(sourceModelId) ?? modalities;
+	const output = authoritative?.output ?? ['text'];
+	if (output.length !== 1 || output[0] !== 'text') {
+		return false;
+	}
+	const input = authoritative?.input ?? ['text'];
+	return input.includes('text');
 }
 
 export function selectModelsDevPricingKey(modelId: string, catalogId: string | undefined): string {

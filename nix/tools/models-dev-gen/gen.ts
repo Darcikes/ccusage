@@ -20,7 +20,7 @@ import {
 	formatDuplicateModelsDevPricingKeyWarning,
 	isEmbeddableModelsDevCandidate,
 	isPriceableModelsDevCost,
-	isTextOutputModel,
+	isTokenPricedModel,
 	type ModelsDevPricingCandidate,
 	modelsDevProviderTrust,
 	modelsDevProviderTrustArtifact,
@@ -38,11 +38,12 @@ type Model = {
 	id?: string;
 	cost?: Cost;
 	limit?: { context?: number | null };
-	modalities?: { output?: readonly string[] };
+	modalities?: { input?: readonly string[]; output?: readonly string[] };
 };
 type ModelMetadata = {
 	id?: string;
 	release_date?: string;
+	modalities?: { input?: readonly string[]; output?: readonly string[] };
 };
 type Provider = { id?: string; models?: Record<string, Model> };
 type EmbeddedModel = {
@@ -59,7 +60,7 @@ const { models, providers } = (await generateCatalog('.')) as {
 	providers: Record<string, Provider>;
 };
 
-const catalogIndex = buildModelsDevCatalogIndex(Object.keys(models));
+const catalogIndex = buildModelsDevCatalogIndex(models);
 
 const selected: Record<string, { candidate: ModelsDevPricingCandidate; entry: EmbeddedModel }> = {};
 for (const [providerId, provider] of sortedEntries(providers)) {
@@ -74,8 +75,15 @@ for (const [providerId, provider] of sortedEntries(providers)) {
 		}
 		const cost = model.cost ?? {};
 		// Skip entries without the base prices the runtime loader requires, and
-		// models whose cost block prices assets rather than output text tokens.
-		if (!isPriceableModelsDevCost(cost) || !isTextOutputModel(model.modalities)) {
+		// models whose rates are per asset rather than per text token.
+		if (
+			!isPriceableModelsDevCost(cost) ||
+			!isTokenPricedModel({
+				sourceModelId: modelId,
+				modalities: model.modalities,
+				index: catalogIndex,
+			})
+		) {
 			continue;
 		}
 		const pricingKey = selectModelsDevPricingKey(modelId, model.id);

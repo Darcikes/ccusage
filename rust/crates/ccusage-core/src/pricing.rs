@@ -1626,6 +1626,29 @@ mod tests {
     }
 
     #[test]
+    fn embedded_models_dev_omits_models_priced_per_asset() {
+        // These rates are per second of audio and per generated image. The
+        // runtime divides by a million and multiplies by token counts, so
+        // embedding them reports a wrong cost rather than no cost.
+        let embedded = embedded_models_dev_pricing();
+
+        for model in [
+            "whisper-large-v3",
+            "gemini-2.5-flash-image",
+            "gemini-3-pro-image-preview",
+        ] {
+            assert!(
+                embedded.find_exact(model).is_none(),
+                "{model} prices assets rather than text tokens and must stay out of the snapshot"
+            );
+        }
+        // The guard keys on modalities, not on the name, so text models that
+        // merely accept audio or video input have to survive it.
+        assert!(embedded.find_exact("kimi-k3").is_some());
+        assert!(embedded.find_exact("gemini-3-flash-preview").is_some());
+    }
+
+    #[test]
     fn embedded_models_dev_prices_resold_models_from_their_author() {
         // models.dev lists kimi-k2.7-code once per catalog that serves it, and
         // reseller catalogs publish their own promotional rates. Selecting one of
