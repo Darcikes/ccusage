@@ -9,13 +9,13 @@ use ccusage_cli::PricingOverride;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::fast::FxHashMap;
+use crate::fast::{FxHashMap, FxHashSet};
 
 const BUILD_TIME_PRICING_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/litellm-pricing.json"));
 const BUILD_TIME_MODELS_DEV_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/models-dev-pricing.json"));
-const MODELS_DEV_PROVIDER_TRUST_JSON: &str = include_str!("models-dev-provider-trust.json");
+const MODELS_DEV_CATALOG_RULES_JSON: &str = include_str!("models-dev-catalog-rules.json");
 const FAST_MULTIPLIER_OVERRIDES_JSON: &str = include_str!("fast-multiplier-overrides.json");
 const LITELLM_PRICING_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -129,43 +129,73 @@ struct ModelsDevProvider {
     models: FxHashMap<String, ModelsDevModel>,
 }
 
-/// How much a models.dev provider catalog can be trusted to publish list
-/// pricing, generated from the pinned catalog by `just gen-models-dev-pricing`.
+/// The selection rules for reading a live models.dev response, generated from
+/// the pinned catalog by `just gen-models-dev-pricing`.
 ///
 /// models.dev repeats every model once per catalog that serves it, and reseller
-/// catalogs carry their own promotions and markups. The live `api.json` this
-/// loader fetches records no authorship, so the ranking has to be carried in
-/// from generation time.
+/// catalogs carry their own promotions, markups, and looser descriptions. The
+/// live `api.json` records neither who authored a model nor the authored
+/// modalities, so both have to be carried in from generation time; without them
+/// the online path would make different decisions than the embedded snapshot.
 #[derive(Debug, Deserialize)]
-struct ModelsDevProviderTrust {
+struct ModelsDevCatalogRules {
     /// Catalogs of the providers that author models.
-    owners: Vec<String>,
+    owners: FxHashSet<String>,
     /// Cloud platforms that resell at list price plus a published regional
     /// premium, and the only source of platform-specific model ids.
-    platforms: Vec<String>,
+    platforms: FxHashSet<String>,
+    /// Models the authored catalog prices per asset - per second of audio, per
+    /// generated image - rather than per token.
+    #[serde(rename = "assetPricedModelIds")]
+    asset_priced_model_ids: FxHashSet<String>,
 }
 
-impl ModelsDevProviderTrust {
+/// Trust tiers, matching the generator's.
+const MODELS_DEV_TRUST_OWNER: u8 = 3;
+const MODELS_DEV_TRUST_PLATFORM: u8 = 2;
+const MODELS_DEV_TRUST_RESELLER: u8 = 1;
+
+impl ModelsDevCatalogRules {
     fn rank(&self, provider_id: &str) -> u8 {
-        if self.owners.iter().any(|owner| owner == provider_id) {
-            return 2;
+        if self.owners.contains(provider_id) {
+            return MODELS_DEV_TRUST_OWNER;
         }
-        if self
-            .platforms
-            .iter()
-            .any(|platform| platform == provider_id)
-        {
-            return 1;
+        if self.platforms.contains(provider_id) {
+            return MODELS_DEV_TRUST_PLATFORM;
         }
-        0
+        MODELS_DEV_TRUST_RESELLER
+    }
+
+    /// Whether the embedded `input` and `output` rates mean per-token rates.
+    ///
+    /// The authored catalog decides where it knows the model, because a reseller
+    /// describing an image model as text-only would otherwise let a per-image
+    /// rate through. Models the authored catalog does not list fall back to the
+    /// serving catalog's own modalities.
+    fn is_token_priced(&self, model_id: &str, modalities: Option<&ModelsDevModalities>) -> bool {
+        if self.asset_priced_model_ids.contains(model_id) {
+            return false;
+        }
+        let Some(modalities) = modalities else {
+            return true;
+        };
+        if let Some(output) = modalities.output.as_deref() {
+            if !output.is_empty() && !(output.len() == 1 && output[0] == "text") {
+                return false;
+            }
+        }
+        match modalities.input.as_deref() {
+            Some(input) if !input.is_empty() => input.iter().any(|modality| modality == "text"),
+            _ => true,
+        }
     }
 }
 
-fn models_dev_provider_trust() -> &'static ModelsDevProviderTrust {
-    static TRUST: OnceLock<ModelsDevProviderTrust> = OnceLock::new();
-    TRUST.get_or_init(|| {
-        serde_json::from_str(MODELS_DEV_PROVIDER_TRUST_JSON)
-            .expect("parse embedded models-dev-provider-trust.json")
+fn models_dev_catalog_rules() -> &'static ModelsDevCatalogRules {
+    static RULES: OnceLock<ModelsDevCatalogRules> = OnceLock::new();
+    RULES.get_or_init(|| {
+        serde_json::from_str(MODELS_DEV_CATALOG_RULES_JSON)
+            .expect("parse embedded models-dev-catalog-rules.json")
     })
 }
 
@@ -222,6 +252,13 @@ struct ModelsDevModel {
     id: Option<String>,
     cost: Option<ModelsDevCost>,
     limit: Option<ModelsDevLimit>,
+    modalities: Option<ModelsDevModalities>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelsDevModalities {
+    input: Option<Vec<String>>,
+    output: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -384,31 +421,57 @@ impl PricingMap {
         let raw = parse_models_dev_json(json)?;
         Some(match raw {
             ModelsDevJson::Providers(providers) => {
-                let trust = models_dev_provider_trust();
+                let rules = models_dev_catalog_rules();
                 let mut ranked: Vec<_> = providers.into_iter().collect();
-                // The first catalog to claim a model id keeps it, so load the
-                // most trustworthy ones first. Sorting by id within a tier keeps
-                // the result from depending on hash iteration order.
+                // The most trustworthy catalog has to be loaded first, because it
+                // claims the model id. Sorting by id within a tier keeps the
+                // result from depending on hash iteration order.
                 ranked.sort_by(|(left, _), (right, _)| {
-                    trust
+                    rules
                         .rank(right)
-                        .cmp(&trust.rank(left))
+                        .cmp(&rules.rank(left))
                         .then_with(|| left.cmp(right))
                 });
+                // Within one tier the generator prefers the entry carrying more
+                // pricing detail, so track what claimed each id to make the same
+                // choice here rather than keeping whichever came first.
+                let mut claims: FxHashMap<String, (u8, u8)> = FxHashMap::default();
                 ranked
                     .into_iter()
-                    .map(|(_, provider)| self.load_models_dev_models(provider.models))
+                    .map(|(provider_id, provider)| {
+                        let trust = rules.rank(&provider_id);
+                        self.load_models_dev_models(provider.models, trust, &mut claims)
+                    })
                     .sum()
             }
-            ModelsDevJson::Models(models) => self.load_models_dev_models(models),
+            ModelsDevJson::Models(models) => {
+                let mut claims = FxHashMap::default();
+                self.load_models_dev_models(models, MODELS_DEV_TRUST_OWNER, &mut claims)
+            }
         })
     }
 
-    fn load_models_dev_models(&mut self, models: FxHashMap<String, ModelsDevModel>) -> usize {
+    /// Load the entries of one provider catalog.
+    ///
+    /// `claims` records the `(trust, detail)` of whichever catalog supplied each
+    /// model id so far in this pass, so a better candidate can replace a weaker
+    /// one. Ids absent from it belong to another pricing source and are left
+    /// alone.
+    fn load_models_dev_models(
+        &mut self,
+        models: FxHashMap<String, ModelsDevModel>,
+        trust: u8,
+        claims: &mut FxHashMap<String, (u8, u8)>,
+    ) -> usize {
+        let rules = models_dev_catalog_rules();
         let mut loaded_count = 0;
         for (model_key, model) in models {
             let model_id = model.id.unwrap_or(model_key);
-            if self.entries.contains_key(&model_id) {
+            let claimed = claims.get(&model_id).copied();
+            if claimed.is_none() && self.entries.contains_key(&model_id) {
+                continue;
+            }
+            if !rules.is_token_priced(&model_id, model.modalities.as_ref()) {
                 continue;
             }
             let Some(cost) = model.cost else {
@@ -423,6 +486,13 @@ impl PricingMap {
             // Flat-fee subscription catalogs such as `kimi-for-coding` publish
             // all-zero token costs, which would report every request as free.
             if input == 0.0 && output == 0.0 {
+                continue;
+            }
+            let context_limit = model.limit.and_then(|limit| limit.context);
+            let detail = u8::from(cost.cache_read.is_some())
+                + u8::from(cost.cache_write.is_some())
+                + u8::from(context_limit.is_some());
+            if claimed.is_some_and(|claimed| claimed >= (trust, detail)) {
                 continue;
             }
             let input = input / 1_000_000.0;
@@ -450,10 +520,14 @@ impl PricingMap {
                     fast_multiplier: 1.0,
                 },
             );
-            if let Some(context_limit) = model.limit.and_then(|limit| limit.context) {
-                self.context_limits.insert(model_id, context_limit);
+            if let Some(context_limit) = context_limit {
+                self.context_limits.insert(model_id.clone(), context_limit);
             }
-            loaded_count += 1;
+            // Replacing a weaker claim is not a new model, so it must not count
+            // twice: the count is how many models the payload resolved.
+            if claims.insert(model_id, (trust, detail)).is_none() {
+                loaded_count += 1;
+            }
         }
         self.clear_find_cache();
         loaded_count
@@ -2085,6 +2159,82 @@ mod tests {
         let kimi = pricing.find_exact("kimi-k2.7-code").unwrap();
         assert!((kimi.input * 1e6 - 0.95).abs() < 1e-9);
         assert!((kimi.output * 1e6 - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn live_models_dev_pricing_skips_models_priced_per_asset() {
+        // The embedded snapshot excludes these, so the online refresh has to as
+        // well or `--offline` and the default path disagree. The authored
+        // catalog's verdict is carried in, so a reseller calling an image model
+        // text-only cannot reintroduce it.
+        let json = r#"{
+                "302ai": {
+                    "models": {
+                        "gemini-2.5-flash-image": {
+                            "modalities": { "input": ["text", "image"], "output": ["text"] },
+                            "cost": { "input": 0.3, "output": 30 }
+                        }
+                    }
+                },
+                "scaleway": {
+                    "models": {
+                        "some-unlisted-transcriber": {
+                            "modalities": { "input": ["audio"], "output": ["text"] },
+                            "cost": { "input": 0.003, "output": 0 }
+                        }
+                    }
+                },
+                "moonshotai": {
+                    "models": {
+                        "kimi-k3": {
+                            "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
+                            "cost": { "input": 3, "output": 15 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        // Only kimi-k3 loads: audio-only input is rejected from the payload
+        // itself, and the image model is rejected by the authored catalog.
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        assert!(pricing.find_exact("gemini-2.5-flash-image").is_none());
+        assert!(pricing.find_exact("some-unlisted-transcriber").is_none());
+        assert!(pricing.find_exact("kimi-k3").is_some());
+    }
+
+    #[test]
+    fn live_models_dev_pricing_prefers_the_more_detailed_entry_within_a_tier() {
+        // Generation breaks same-tier ties by how much pricing detail an entry
+        // carries, so the online path has to as well or the two disagree.
+        let json = r#"{
+                "302ai": {
+                    "models": {
+                        "some-reseller-only-model": {
+                            "cost": { "input": 1, "output": 2 }
+                        }
+                    }
+                },
+                "openrouter": {
+                    "models": {
+                        "some-reseller-only-model": {
+                            "cost": { "input": 1, "output": 2, "cache_read": 0.1 },
+                            "limit": { "context": 128000 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        // One model, counted once even though the second entry replaced the first.
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        let entry = pricing.find_exact("some-reseller-only-model").unwrap();
+        assert!(entry.cache_read_explicit);
+        assert!((entry.cache_read * 1e6 - 0.1).abs() < 1e-9);
+        assert_eq!(
+            pricing.context_limits.get("some-reseller-only-model"),
+            Some(&128_000)
+        );
     }
 
     #[test]

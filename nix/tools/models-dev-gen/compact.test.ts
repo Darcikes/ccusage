@@ -8,7 +8,7 @@ import {
 	isTokenPricedModel,
 	MODELS_DEV_PROVIDER_TRUST,
 	modelsDevProviderTrust,
-	modelsDevProviderTrustArtifact,
+	modelsDevCatalogRulesArtifact,
 	shouldReplaceModelsDevPricingCandidate,
 	selectModelsDevPricingKey,
 } from './compact.ts';
@@ -258,8 +258,8 @@ void it('falls back to the serving catalog for models the authored catalog omits
 	);
 });
 
-void it('exports sorted provider trust lists for the runtime loader', () => {
-	assert.deepEqual(modelsDevProviderTrustArtifact(index), {
+void it('exports the rules the runtime loader cannot derive from a live response', () => {
+	assert.deepEqual(modelsDevCatalogRulesArtifact(index), {
 		owners: ['anthropic', 'google', 'moonshotai', 'openai', 'xai', 'zai', 'zhipuai'],
 		platforms: [
 			'amazon-bedrock',
@@ -268,6 +268,9 @@ void it('exports sorted provider trust lists for the runtime loader', () => {
 			'google-vertex',
 			'google-vertex-anthropic',
 		],
+		// Carried so the online path rejects what the snapshot excluded, even
+		// though the live response never says who authored a model.
+		assetPricedModelIds: ['gemini-2.5-flash-image', 'whisper-large-v3'],
 	});
 });
 

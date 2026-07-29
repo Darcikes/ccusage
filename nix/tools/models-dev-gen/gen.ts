@@ -10,8 +10,8 @@
  * The output is committed to the repository and embedded at build time, so
  * every platform ships the identical, pinned data without any build-time
  * network access. The same pinned catalog also generates the Codex auto-review
- * fallback metadata used by the Rust parser and the provider trust lists the
- * Rust runtime loader applies to live models.dev responses. Run via
+ * fallback metadata used by the Rust parser and the selection rules the Rust
+ * runtime loader applies to live models.dev responses. Run via
  * `just gen-models-dev-pricing` (see the sibling `default.nix`).
  */
 import { generateCatalog } from './packages/core/src/generate.ts';
@@ -23,7 +23,7 @@ import {
 	isTokenPricedModel,
 	type ModelsDevPricingCandidate,
 	modelsDevProviderTrust,
-	modelsDevProviderTrustArtifact,
+	modelsDevCatalogRulesArtifact,
 	selectModelsDevPricingKey,
 	shouldReplaceModelsDevPricingCandidate,
 } from './compact.ts';
@@ -159,11 +159,11 @@ if (outfile == null || outfile.length === 0) {
 
 await Bun.write(outfile, `${JSON.stringify(sortObject(out), null, 2)}\n`);
 
-const providerTrustOutfile = process.env.PROVIDER_TRUST_OUTFILE;
-if (providerTrustOutfile != null && providerTrustOutfile.length > 0) {
+const catalogRulesOutfile = process.env.CATALOG_RULES_OUTFILE;
+if (catalogRulesOutfile != null && catalogRulesOutfile.length > 0) {
 	await Bun.write(
-		providerTrustOutfile,
-		`${JSON.stringify(modelsDevProviderTrustArtifact(catalogIndex), null, 2)}\n`,
+		catalogRulesOutfile,
+		`${JSON.stringify(modelsDevCatalogRulesArtifact(catalogIndex), null, 2)}\n`,
 	);
 }
 

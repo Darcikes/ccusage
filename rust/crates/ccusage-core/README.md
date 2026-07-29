@@ -10,9 +10,10 @@ neither has a consumer outside it.
 - `pricing.rs` — the `PricingMap`, the embedded models.dev and LiteLLM snapshots,
   the built-in rate tables, and the optional runtime fetch. models.dev repeats
   every model once per catalog that serves it, so
-  `models-dev-provider-trust.json` records which catalogs author models and
-  which only resell them; both the snapshot and the runtime fetch take the
-  authoring catalog's rates over a reseller's promotional ones.
+  `models-dev-catalog-rules.json` carries what a live `api.json` response does
+  not say: which catalogs author models, which only resell them, and which
+  models are priced per asset rather than per token. Both the snapshot and the
+  runtime fetch apply it, so they cannot disagree about where a rate came from.
 - `cost.rs` — cost calculation and missing-pricing detection.
 - `summary.rs`, `agent_report.rs`, `output.rs` — row aggregation, period labels,
   JSON shaping, and table rendering.

@@ -173,16 +173,23 @@ export function isEmbeddableModelsDevCandidate({
 }
 
 /**
- * Provider trust lists for the Rust runtime loader, which sees only the live
- * `api.json` and therefore cannot scan the authored catalog itself.
+ * The selection rules the Rust runtime loader needs, for the same decisions this
+ * module makes at generation time. The runtime sees only the live `api.json`, so
+ * it can neither scan the authored catalog for authorship nor read authored
+ * modalities, and both have to be carried in.
  */
-export function modelsDevProviderTrustArtifact(index: ModelsDevCatalogIndex): {
+export function modelsDevCatalogRulesArtifact(index: ModelsDevCatalogIndex): {
 	owners: string[];
 	platforms: string[];
+	assetPricedModelIds: string[];
 } {
+	const assetPricedModelIds = [...index.authoredModelIds]
+		.filter((sourceModelId) => !isTokenPricedModel({ sourceModelId, modalities: undefined, index }))
+		.sort();
 	return {
 		owners: [...index.authorProviderIds, ...FIRST_PARTY_PROVIDER_ID_ALIASES].sort(),
 		platforms: [...PLATFORM_PROVIDER_IDS].sort(),
+		assetPricedModelIds,
 	};
 }
 
