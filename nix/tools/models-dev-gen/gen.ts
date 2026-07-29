@@ -3,29 +3,30 @@
  *
  * models.dev ships per-model TOML sources rather than a prebuilt catalog, so we
  * reuse its own `generateCatalog` routine (the same code that backs
- * https://models.dev/api.json) and then compact the result down to the
- * Anthropic- and Kimi/Moonshot-relevant models and the few pricing fields
- * ccusage consumes. The embedded output is a flat map keyed by runtime model
- * id. The output is committed to the repository and embedded at build time, so
+ * https://models.dev/api.json) and then compact the result down to the few
+ * pricing fields ccusage consumes. Every text model a trusted catalog publishes
+ * is kept, and each pricing key takes the most trustworthy catalog's rates (see
+ * `compact.ts`). The embedded output is a flat map keyed by runtime model id.
+ * The output is committed to the repository and embedded at build time, so
  * every platform ships the identical, pinned data without any build-time
  * network access. The same pinned catalog also generates the Codex auto-review
- * fallback metadata used by the Rust parser. Run via `just gen-models-dev-pricing`
- * (see the sibling `default.nix`).
+ * fallback metadata used by the Rust parser and the provider trust lists the
+ * Rust runtime loader applies to live models.dev responses. Run via
+ * `just gen-models-dev-pricing` (see the sibling `default.nix`).
  */
 import { generateCatalog } from './packages/core/src/generate.ts';
 import {
+	buildModelsDevCatalogIndex,
 	formatDuplicateModelsDevPricingKeyWarning,
+	isEmbeddableModelsDevCandidate,
+	isPriceableModelsDevCost,
+	isTextOutputModel,
 	type ModelsDevPricingCandidate,
+	modelsDevProviderTrust,
+	modelsDevProviderTrustArtifact,
 	selectModelsDevPricingKey,
 	shouldReplaceModelsDevPricingCandidate,
 } from './compact.ts';
-
-/**
- * Model ids/keys we keep in the committed snapshot.
- * Claude remains first-class; Kimi/Moonshot is included so offline pricing can
- * cover models LiteLLM has not published yet (for example kimi-k3).
- */
-const KEEP = /claude|anthropic|kimi|moonshot/i;
 
 type Cost = {
 	input?: number | null;
@@ -33,7 +34,12 @@ type Cost = {
 	cache_read?: number | null;
 	cache_write?: number | null;
 };
-type Model = { id?: string; cost?: Cost; limit?: { context?: number | null } };
+type Model = {
+	id?: string;
+	cost?: Cost;
+	limit?: { context?: number | null };
+	modalities?: { output?: readonly string[] };
+};
 type ModelMetadata = {
 	id?: string;
 	release_date?: string;
@@ -53,21 +59,23 @@ const { models, providers } = (await generateCatalog('.')) as {
 	providers: Record<string, Provider>;
 };
 
+const catalogIndex = buildModelsDevCatalogIndex(Object.keys(models));
+
 const selected: Record<string, { candidate: ModelsDevPricingCandidate; entry: EmbeddedModel }> = {};
 for (const [providerId, provider] of sortedEntries(providers)) {
 	for (const [modelId, model] of sortedEntries(provider.models ?? {})) {
-		// models.dev also exposes the canonical id under `id`; match either so
-		// provider-prefixed aliases (e.g. us.anthropic.*) are kept too.
-		if (!(KEEP.test(modelId) || KEEP.test(model.id ?? ''))) {
+		const trust = modelsDevProviderTrust({
+			providerId,
+			sourceModelId: modelId,
+			index: catalogIndex,
+		});
+		if (!isEmbeddableModelsDevCandidate({ trust, sourceModelId: modelId, index: catalogIndex })) {
 			continue;
 		}
 		const cost = model.cost ?? {};
-		// Skip entries without the base prices the runtime loader requires.
-		// Also drop all-zero placeholder costs (for example kimi-for-coding/k3).
-		if (cost.input == null || cost.output == null) {
-			continue;
-		}
-		if (cost.input === 0 && cost.output === 0) {
+		// Skip entries without the base prices the runtime loader requires, and
+		// models whose cost block prices assets rather than output text tokens.
+		if (!isPriceableModelsDevCost(cost) || !isTextOutputModel(model.modalities)) {
 			continue;
 		}
 		const pricingKey = selectModelsDevPricingKey(modelId, model.id);
@@ -85,6 +93,7 @@ for (const [providerId, provider] of sortedEntries(providers)) {
 		const candidate: ModelsDevPricingCandidate = {
 			sourceProviderId: provider.id ?? providerId,
 			sourceModelId: modelId,
+			trust,
 			hasContextLimit: entry.limit != null,
 			hasExplicitCacheRead: cost.cache_read != null,
 			hasExplicitCacheWrite: cost.cache_write != null,
@@ -92,12 +101,16 @@ for (const [providerId, provider] of sortedEntries(providers)) {
 		const existing = selected[pricingKey];
 		if (existing != null) {
 			const replacement = shouldReplaceModelsDevPricingCandidate(existing.candidate, candidate);
-			console.warn(
-				formatDuplicateModelsDevPricingKeyWarning({
-					pricingKey,
-					sourceModelId: replacement ? existing.candidate.sourceModelId : candidate.sourceModelId,
-				}),
-			);
+			// Duplicates across trust tiers are the normal case and are resolved by
+			// tier, so only report ambiguity the tiers cannot settle.
+			if (existing.candidate.trust === candidate.trust) {
+				console.warn(
+					formatDuplicateModelsDevPricingKeyWarning({
+						pricingKey,
+						sourceModelId: replacement ? existing.candidate.sourceModelId : candidate.sourceModelId,
+					}),
+				);
+			}
 			if (!replacement) {
 				continue;
 			}
@@ -137,6 +150,14 @@ if (outfile == null || outfile.length === 0) {
 }
 
 await Bun.write(outfile, `${JSON.stringify(sortObject(out), null, 2)}\n`);
+
+const providerTrustOutfile = process.env.PROVIDER_TRUST_OUTFILE;
+if (providerTrustOutfile != null && providerTrustOutfile.length > 0) {
+	await Bun.write(
+		providerTrustOutfile,
+		`${JSON.stringify(modelsDevProviderTrustArtifact(catalogIndex), null, 2)}\n`,
+	);
+}
 
 const codexFallbacksOutfile = process.env.CODEX_AUTO_REVIEW_FALLBACKS_OUTFILE;
 if (codexFallbacksOutfile != null && codexFallbacksOutfile.length > 0) {

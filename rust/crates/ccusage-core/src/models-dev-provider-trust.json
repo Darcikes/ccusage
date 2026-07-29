@@ -1,0 +1,36 @@
+{
+	"owners": [
+		"alibaba",
+		"anthropic",
+		"cohere",
+		"deepreinforce",
+		"deepseek",
+		"google",
+		"meituan",
+		"meta",
+		"microsoft",
+		"minimax",
+		"mistral",
+		"moonshotai",
+		"nvidia",
+		"openai",
+		"perplexity",
+		"poolside",
+		"sakana",
+		"sarvam",
+		"stepfun",
+		"tencent",
+		"thinkingmachines",
+		"xai",
+		"xiaomi",
+		"zai",
+		"zhipuai"
+	],
+	"platforms": [
+		"amazon-bedrock",
+		"azure",
+		"azure-cognitive-services",
+		"google-vertex",
+		"google-vertex-anthropic"
+	]
+}
