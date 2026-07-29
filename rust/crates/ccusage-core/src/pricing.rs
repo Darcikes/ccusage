@@ -150,6 +150,21 @@ struct ModelsDevCatalogRules {
     asset_priced_model_ids: FxHashSet<String>,
 }
 
+/// How strong one catalog's claim on a model id is.
+///
+/// Ordered exactly as `shouldReplaceModelsDevPricingCandidate` compares
+/// candidates at generation time - trust first, then cache-read, cache-write and
+/// context-limit presence - so the online path resolves the same catalog the
+/// committed snapshot did. `derive(PartialOrd)` compares the fields in
+/// declaration order, which is that order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct ModelsDevClaim {
+    trust: u8,
+    has_cache_read: bool,
+    has_cache_write: bool,
+    has_context_limit: bool,
+}
+
 /// Trust tiers, matching the generator's.
 const MODELS_DEV_TRUST_OWNER: u8 = 3;
 const MODELS_DEV_TRUST_PLATFORM: u8 = 2;
@@ -172,22 +187,33 @@ impl ModelsDevCatalogRules {
     /// describing an image model as text-only would otherwise let a per-image
     /// rate through. Models the authored catalog does not list fall back to the
     /// serving catalog's own modalities.
-    fn is_token_priced(&self, model_id: &str, modalities: Option<&ModelsDevModalities>) -> bool {
-        if self.asset_priced_model_ids.contains(model_id) {
+    ///
+    /// `source_model_id` is the catalog's own key for the model, the same id
+    /// `isTokenPricedModel` is given at generation time, because that is what
+    /// `assetPricedModelIds` records - not the pricing key the entry's `id`
+    /// field may resolve to.
+    fn is_token_priced(
+        &self,
+        source_model_id: &str,
+        modalities: Option<&ModelsDevModalities>,
+    ) -> bool {
+        if self.asset_priced_model_ids.contains(source_model_id) {
             return false;
         }
         let Some(modalities) = modalities else {
             return true;
         };
-        // An absent or empty list says nothing about the model, so it reads as
-        // plain text rather than disqualifying the entry.
+        // An absent list says nothing about the model, so it reads as plain text
+        // rather than disqualifying the entry. An explicitly empty one is not
+        // text, which is how `isTokenPricedModel` reads it too: it defaults only
+        // a missing list to `['text']`.
         let text_only_output = match modalities.output.as_deref() {
+            None => true,
             Some([single]) => single == "text",
-            Some([]) | None => true,
             Some(_) => false,
         };
         let accepts_text = match modalities.input.as_deref() {
-            Some([]) | None => true,
+            None => true,
             Some(input) => input.iter().any(|modality| modality == "text"),
         };
         text_only_output && accepts_text
@@ -438,7 +464,7 @@ impl PricingMap {
                 // Within one tier the generator prefers the entry carrying more
                 // pricing detail, so track what claimed each id to make the same
                 // choice here rather than keeping whichever came first.
-                let mut claims: FxHashMap<String, (u8, u8)> = FxHashMap::default();
+                let mut claims: FxHashMap<String, ModelsDevClaim> = FxHashMap::default();
                 ranked
                     .into_iter()
                     .map(|(provider_id, provider)| {
@@ -456,7 +482,7 @@ impl PricingMap {
 
     /// Load the entries of one provider catalog.
     ///
-    /// `claims` records the `(trust, detail)` of whichever catalog supplied each
+    /// `claims` records the claim strength of whichever catalog supplied each
     /// model id so far in this pass, so a better candidate can replace a weaker
     /// one. Ids absent from it belong to another pricing source and are left
     /// alone.
@@ -464,17 +490,26 @@ impl PricingMap {
         &mut self,
         models: FxHashMap<String, ModelsDevModel>,
         trust: u8,
-        claims: &mut FxHashMap<String, (u8, u8)>,
+        claims: &mut FxHashMap<String, ModelsDevClaim>,
     ) -> usize {
         let rules = models_dev_catalog_rules();
         let mut loaded_count = 0;
-        for (model_key, model) in models {
+        // Two source keys in one catalog can resolve to the same model id, and the
+        // generator walks each catalog in key order, so match that instead of
+        // depending on hash iteration order.
+        let mut sources: Vec<_> = models.into_iter().collect();
+        sources.sort_by(|(left, _), (right, _)| left.cmp(right));
+        for (model_key, model) in sources {
+            // Eligibility is decided before the pricing key is resolved, because
+            // generation asks about the catalog's source key: an authored
+            // asset-priced model served under a different `id` would otherwise
+            // slip past and bill per-image or per-second rates as per-token ones.
+            if !rules.is_token_priced(&model_key, model.modalities.as_ref()) {
+                continue;
+            }
             let model_id = model.id.unwrap_or(model_key);
             let claimed = claims.get(&model_id).copied();
             if claimed.is_none() && self.entries.contains_key(&model_id) {
-                continue;
-            }
-            if !rules.is_token_priced(&model_id, model.modalities.as_ref()) {
                 continue;
             }
             let Some(cost) = model.cost else {
@@ -492,10 +527,13 @@ impl PricingMap {
                 continue;
             }
             let context_limit = model.limit.and_then(|limit| limit.context);
-            let detail = u8::from(cost.cache_read.is_some())
-                + u8::from(cost.cache_write.is_some())
-                + u8::from(context_limit.is_some());
-            if claimed.is_some_and(|claimed| claimed >= (trust, detail)) {
+            let claim = ModelsDevClaim {
+                trust,
+                has_cache_read: cost.cache_read.is_some(),
+                has_cache_write: cost.cache_write.is_some(),
+                has_context_limit: context_limit.is_some(),
+            };
+            if claimed.is_some_and(|claimed| claimed >= claim) {
                 continue;
             }
             let input = input / 1_000_000.0;
@@ -523,12 +561,20 @@ impl PricingMap {
                     fast_multiplier: 1.0,
                 },
             );
-            if let Some(context_limit) = context_limit {
-                self.context_limits.insert(model_id.clone(), context_limit);
+            match context_limit {
+                Some(context_limit) => {
+                    self.context_limits.insert(model_id.clone(), context_limit);
+                }
+                // A replacement that publishes no limit must not keep the limit of
+                // the catalog it replaced.
+                None if claimed.is_some() => {
+                    self.context_limits.remove(&model_id);
+                }
+                None => {}
             }
             // Replacing a weaker claim is not a new model, so it must not count
             // twice: the count is how many models the payload resolved.
-            if claims.insert(model_id, (trust, detail)).is_none() {
+            if claims.insert(model_id, claim).is_none() {
                 loaded_count += 1;
             }
         }
@@ -2207,6 +2253,62 @@ mod tests {
     }
 
     #[test]
+    fn live_models_dev_pricing_keys_asset_pricing_on_the_source_model_id() {
+        // `assetPricedModelIds` records the authored source ids generation
+        // matches on, so a catalog serving one under a different `id` must be
+        // rejected on its key, not on the pricing key that key resolves to.
+        let json = r#"{
+                "google": {
+                    "models": {
+                        "gemini-2.5-flash-image": {
+                            "id": "models/gemini-2.5-flash-image",
+                            "modalities": { "input": ["text"], "output": ["text"] },
+                            "cost": { "input": 0.3, "output": 30 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(0));
+        assert!(
+            pricing
+                .find_exact("models/gemini-2.5-flash-image")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn live_models_dev_pricing_rejects_explicitly_empty_modalities() {
+        // `isTokenPricedModel` defaults only a *missing* list to `['text']`, so an
+        // empty one has to fail here too or the snapshot and the online refresh
+        // disagree about the same payload.
+        let json = r#"{
+                "moonshotai": {
+                    "models": {
+                        "empty-output-model": {
+                            "modalities": { "input": ["text"], "output": [] },
+                            "cost": { "input": 1, "output": 2 }
+                        },
+                        "empty-input-model": {
+                            "modalities": { "input": [], "output": ["text"] },
+                            "cost": { "input": 1, "output": 2 }
+                        },
+                        "no-modalities-model": {
+                            "cost": { "input": 1, "output": 2 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        assert!(pricing.find_exact("empty-output-model").is_none());
+        assert!(pricing.find_exact("empty-input-model").is_none());
+        assert!(pricing.find_exact("no-modalities-model").is_some());
+    }
+
+    #[test]
     fn live_models_dev_pricing_prefers_the_more_detailed_entry_within_a_tier() {
         // Generation breaks same-tier ties by how much pricing detail an entry
         // carries, so the online path has to as well or the two disagree.
@@ -2238,6 +2340,91 @@ mod tests {
             pricing.context_limits.get("some-reseller-only-model"),
             Some(&128_000)
         );
+    }
+
+    #[test]
+    fn live_models_dev_pricing_orders_detail_the_way_generation_does() {
+        // Generation compares cache-read, then cache-write, then context limit, so
+        // a cache-read-only entry outranks one carrying the other two. Counting
+        // fields instead would pick the other catalog online.
+        let json = r#"{
+                "302ai": {
+                    "models": {
+                        "some-reseller-only-model": {
+                            "cost": { "input": 1, "output": 2, "cache_read": 0.1 }
+                        }
+                    }
+                },
+                "openrouter": {
+                    "models": {
+                        "some-reseller-only-model": {
+                            "cost": { "input": 1, "output": 2, "cache_write": 1.25 },
+                            "limit": { "context": 128000 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        let entry = pricing.find_exact("some-reseller-only-model").unwrap();
+        assert!(entry.cache_read_explicit);
+        assert!((entry.cache_read * 1e6 - 0.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn live_models_dev_pricing_drops_the_context_limit_of_a_replaced_catalog() {
+        // The winning catalog publishes no limit, so keeping the loser's would
+        // report a context window the selected rates do not belong to.
+        let json = r#"{
+                "302ai": {
+                    "models": {
+                        "some-reseller-only-model": {
+                            "cost": { "input": 1, "output": 2 },
+                            "limit": { "context": 128000 }
+                        }
+                    }
+                },
+                "moonshotai": {
+                    "models": {
+                        "some-reseller-only-model": {
+                            "cost": { "input": 3, "output": 4 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        let entry = pricing.find_exact("some-reseller-only-model").unwrap();
+        assert!((entry.input * 1e6 - 3.0).abs() < 1e-9);
+        assert_eq!(pricing.context_limits.get("some-reseller-only-model"), None);
+    }
+
+    #[test]
+    fn live_models_dev_pricing_resolves_duplicate_ids_inside_one_catalog_stably() {
+        // Two source keys can carry the same `id`. Generation walks a catalog in
+        // key order and keeps the first of an equal-strength tie, so the lower key
+        // has to win here too rather than whichever the hash map yields first.
+        let json = r#"{
+                "moonshotai": {
+                    "models": {
+                        "b-alias": {
+                            "id": "shared-model",
+                            "cost": { "input": 9, "output": 9 }
+                        },
+                        "a-alias": {
+                            "id": "shared-model",
+                            "cost": { "input": 1, "output": 2 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        let entry = pricing.find_exact("shared-model").unwrap();
+        assert!((entry.input * 1e6 - 1.0).abs() < 1e-9);
     }
 
     #[test]
