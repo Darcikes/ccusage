@@ -317,8 +317,21 @@ void it('exports the rules the runtime loader cannot derive from a live response
 			'google-vertex',
 			'google-vertex-anthropic',
 		],
-		// Carried so the online path rejects what the snapshot excluded, even
+		// Carried so the online path makes the same call the snapshot did, even
 		// though the live response never says who authored a model.
+		authoredModelIds: [
+			'claude-3-5-haiku-20241022',
+			'claude-opus-5',
+			'gemini-2.5-flash-image',
+			'glm-5-turbo',
+			'grok-build-0.1',
+			'kimi-k2.7-code',
+			'whisper-large-v3',
+		],
+		// Anthropic prices its own fast mode, so a reseller's `claude-opus-5-fast`
+		// rate is a markup rather than the tier's only rate, and the runtime needs
+		// to know that to skip it the way generation does.
+		authoredModes: { 'claude-opus-5': ['fast'] },
 		assetPricedModelIds: ['gemini-2.5-flash-image', 'whisper-large-v3'],
 	});
 });

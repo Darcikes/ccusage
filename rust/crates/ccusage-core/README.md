@@ -11,9 +11,10 @@ neither has a consumer outside it.
   the built-in rate tables, and the optional runtime fetch. models.dev repeats
   every model once per catalog that serves it, so
   `models-dev-catalog-rules.json` carries what a live `api.json` response does
-  not say: which catalogs author models, which only resell them, and which
-  models are priced per asset rather than per token. Both the snapshot and the
-  runtime fetch apply it, so they cannot disagree about where a rate came from.
+  not say: which catalogs author models, which only resell them, which model ids
+  and tiers the authored catalog carries, and which models are priced per asset
+  rather than per token. Both the snapshot and the runtime fetch apply it, so
+  they cannot disagree about where a rate came from or which ids exist.
 - `cost.rs` — cost calculation and missing-pricing detection.
 - `summary.rs`, `agent_report.rs`, `output.rs` — row aggregation, period labels,
   JSON shaping, and table rendering.

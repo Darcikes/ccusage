@@ -263,6 +263,8 @@ export function isEmbeddableModelsDevCandidate({
 export function modelsDevCatalogRulesArtifact(index: ModelsDevCatalogIndex): {
 	owners: string[];
 	platforms: string[];
+	authoredModelIds: string[];
+	authoredModes: Record<string, string[]>;
 	assetPricedModelIds: string[];
 } {
 	const assetPricedModelIds = [...index.authoredModelIds]
@@ -271,6 +273,18 @@ export function modelsDevCatalogRulesArtifact(index: ModelsDevCatalogIndex): {
 	return {
 		owners: [...index.authorProviderIds, ...FIRST_PARTY_PROVIDER_ID_ALIASES].sort(),
 		platforms: [...PLATFORM_PROVIDER_IDS].sort(),
+		// The runtime needs both lists: an authored id absent from the asset list
+		// is authored as token-priced, which settles it without consulting
+		// whichever catalog the live response happens to serve it from.
+		authoredModelIds: [...index.authoredModelIds].sort(),
+		// The tiers an author prices itself, so the runtime can tell a reseller-only
+		// tier worth carrying from a reseller's markup on a published rate, which is
+		// the rest of what `isEmbeddableModelsDevCandidate` decides.
+		authoredModes: Object.fromEntries(
+			[...index.authoredModes]
+				.map(([modelId, modes]): [string, string[]] => [modelId, [...modes].sort()])
+				.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+		),
 		assetPricedModelIds,
 	};
 }

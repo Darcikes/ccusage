@@ -126,6 +126,10 @@ struct CompactLiteLlmPricing {
 
 #[derive(Debug, Deserialize)]
 struct ModelsDevProvider {
+    /// models.dev sets this to the catalog's directory name, which is also the
+    /// key it is filed under. The generator reads `provider.id ?? providerId`, so
+    /// prefer it here too rather than relying on the two agreeing.
+    id: Option<String>,
     models: FxHashMap<String, ModelsDevModel>,
 }
 
@@ -144,10 +148,25 @@ struct ModelsDevCatalogRules {
     /// Cloud platforms that resell at list price plus a published regional
     /// premium, and the only source of platform-specific model ids.
     platforms: FxHashSet<String>,
+    /// Every model the authored catalog lists. One that is absent from
+    /// `asset_priced_model_ids` is authored as token-priced, which settles it
+    /// whatever the catalog serving it claims.
+    #[serde(rename = "authoredModelIds")]
+    authored_model_ids: FxHashSet<String>,
+    /// Normalized authored id -> the tiers its author prices itself. A reseller's
+    /// rate for one of those is a markup on a published rate rather than the only
+    /// rate there is, so it is not a tier worth carrying.
+    #[serde(rename = "authoredModes")]
+    authored_modes: FxHashMap<String, FxHashSet<String>>,
     /// Models the authored catalog prices per asset - per second of audio, per
     /// generated image - rather than per token.
     #[serde(rename = "assetPricedModelIds")]
     asset_priced_model_ids: FxHashSet<String>,
+    /// `authored_model_ids` normalized the way `normalizeModelId` normalizes them,
+    /// for the prefix comparison the tier check makes. Derived after parsing
+    /// rather than carried, because it is the same data spelled differently.
+    #[serde(skip)]
+    normalized_authored_model_ids: Vec<String>,
 }
 
 /// How strong one catalog's claim on a model id is.
@@ -181,12 +200,57 @@ impl ModelsDevCatalogRules {
         MODELS_DEV_TRUST_RESELLER
     }
 
+    /// Whether the snapshot would carry this entry at all, mirroring
+    /// `isEmbeddableModelsDevCandidate`.
+    ///
+    /// A trusted catalog is always carried. A reseller catalog is carried when the
+    /// authored catalog knows the model - which is what keeps retired first-party
+    /// releases only resellers still list - or when the id names a separately
+    /// priced tier of a model already carried. Anything else is a reseller's own
+    /// alias for a model a trusted catalog publishes anyway, at the reseller's own
+    /// promotional or marked-up rate, so the online refresh has to skip it too or
+    /// `--offline` and the default path price different sets of ids.
+    fn is_embeddable(&self, trust: u8, source_model_id: &str) -> bool {
+        if trust > MODELS_DEV_TRUST_RESELLER {
+            return true;
+        }
+        self.authored_model_ids.contains(source_model_id)
+            || self.is_tier_variant_of_authored_model(source_model_id)
+    }
+
+    /// Whether a reseller-only id names a separately priced tier of a model
+    /// already carried, such as `kimi-k2.6-nitro` or `glm-5.2-flex`, following
+    /// `isTierVariantOfAuthoredModel`.
+    ///
+    /// Only bare ids qualify: an id carrying a provider path is that provider's
+    /// own entry for a model rather than a distinct tier of it. A tier the author
+    /// prices itself does not qualify either.
+    fn is_tier_variant_of_authored_model(&self, source_model_id: &str) -> bool {
+        if source_model_id.contains('/') {
+            return false;
+        }
+        let normalized = normalized_models_dev_model_id(source_model_id);
+        self.normalized_authored_model_ids.iter().any(|authored| {
+            let Some(tier) = normalized
+                .strip_prefix(authored.as_str())
+                .and_then(|rest| rest.strip_prefix('-'))
+            else {
+                return false;
+            };
+            !self
+                .authored_modes
+                .get(authored.as_str())
+                .is_some_and(|modes| modes.contains(tier))
+        })
+    }
+
     /// Whether the embedded `input` and `output` rates mean per-token rates.
     ///
-    /// The authored catalog decides where it knows the model, because a reseller
-    /// describing an image model as text-only would otherwise let a per-image
-    /// rate through. Models the authored catalog does not list fall back to the
-    /// serving catalog's own modalities.
+    /// The authored catalog decides both ways where it knows the model: a
+    /// reseller describing an image model as text-only must not let a per-image
+    /// rate through, and one describing a token-priced model as image-output
+    /// must not drop a model the snapshot carries. Only models the authored
+    /// catalog never listed fall back to the serving catalog's own modalities.
     ///
     /// `source_model_id` is the catalog's own key for the model, the same id
     /// `isTokenPricedModel` is given at generation time, because that is what
@@ -199,6 +263,9 @@ impl ModelsDevCatalogRules {
     ) -> bool {
         if self.asset_priced_model_ids.contains(source_model_id) {
             return false;
+        }
+        if self.authored_model_ids.contains(source_model_id) {
+            return true;
         }
         let Some(modalities) = modalities else {
             return true;
@@ -220,11 +287,31 @@ impl ModelsDevCatalogRules {
     }
 }
 
+/// Model ids are spelled with either dots or dashes for the same version, as
+/// `normalizeModelId` reads them.
+fn normalized_models_dev_model_id(model_id: &str) -> Cow<'_, str> {
+    if model_id
+        .bytes()
+        .any(|byte| byte == b'.' || byte.is_ascii_uppercase())
+    {
+        Cow::Owned(model_id.to_lowercase().replace('.', "-"))
+    } else {
+        Cow::Borrowed(model_id)
+    }
+}
+
 fn models_dev_catalog_rules() -> &'static ModelsDevCatalogRules {
     static RULES: OnceLock<ModelsDevCatalogRules> = OnceLock::new();
     RULES.get_or_init(|| {
-        serde_json::from_str(MODELS_DEV_CATALOG_RULES_JSON)
-            .expect("parse embedded models-dev-catalog-rules.json")
+        let mut rules: ModelsDevCatalogRules = serde_json::from_str(MODELS_DEV_CATALOG_RULES_JSON)
+            .expect("parse embedded models-dev-catalog-rules.json");
+        rules.normalized_authored_model_ids = rules
+            .authored_model_ids
+            .iter()
+            .map(|model_id| normalized_models_dev_model_id(model_id).into_owned())
+            .collect();
+        rules.normalized_authored_model_ids.sort();
+        rules
     })
 }
 
@@ -455,11 +542,16 @@ impl PricingMap {
                 // The most trustworthy catalog has to be loaded first, because it
                 // claims the model id. Sorting by id within a tier keeps the
                 // result from depending on hash iteration order.
-                ranked.sort_by(|(left, _), (right, _)| {
+                let provider_id = |key: &String, provider: &ModelsDevProvider| {
+                    provider.id.clone().unwrap_or_else(|| key.clone())
+                };
+                ranked.sort_by(|(left_key, left), (right_key, right)| {
+                    let left_id = provider_id(left_key, left);
+                    let right_id = provider_id(right_key, right);
                     rules
-                        .rank(right)
-                        .cmp(&rules.rank(left))
-                        .then_with(|| left.cmp(right))
+                        .rank(&right_id)
+                        .cmp(&rules.rank(&left_id))
+                        .then_with(|| left_id.cmp(&right_id))
                 });
                 // Within one tier the generator prefers the entry carrying more
                 // pricing detail, so track what claimed each id to make the same
@@ -467,7 +559,8 @@ impl PricingMap {
                 let mut claims: FxHashMap<String, ModelsDevClaim> = FxHashMap::default();
                 ranked
                     .into_iter()
-                    .map(|(provider_id, provider)| {
+                    .map(|(provider_key, provider)| {
+                        let provider_id = provider.id.unwrap_or(provider_key);
                         let trust = rules.rank(&provider_id);
                         self.load_models_dev_models(provider.models, trust, &mut claims)
                     })
@@ -504,7 +597,11 @@ impl PricingMap {
             // generation asks about the catalog's source key: an authored
             // asset-priced model served under a different `id` would otherwise
             // slip past and bill per-image or per-second rates as per-token ones.
-            if !rules.is_token_priced(&model_key, model.modalities.as_ref()) {
+            // Both of generation's gates run here, in its order, so the online
+            // refresh carries exactly the ids the snapshot does.
+            if !rules.is_embeddable(trust, &model_key)
+                || !rules.is_token_priced(&model_key, model.modalities.as_ref())
+            {
                 continue;
             }
             let model_id = model.id.unwrap_or(model_key);
@@ -2309,20 +2406,69 @@ mod tests {
     }
 
     #[test]
+    fn live_models_dev_pricing_skips_reseller_ids_the_snapshot_leaves_out() {
+        // Generation embeds a reseller entry only for a model the authored catalog
+        // knows or for a separately priced tier of one. Loading the rest online
+        // prices ids `--offline` does not carry, at a reseller's own rate:
+        // `accounts/fireworks/models/kimi-k2p6` is Fireworks' alias for a model a
+        // trusted catalog publishes anyway, and `claude-opus-5-fast` is a tier
+        // Anthropic prices itself, so the reseller's number is a markup on a
+        // published rate rather than the only rate there is.
+        let json = r#"{
+                "fireworks-ai": {
+                    "models": {
+                        "accounts/fireworks/models/kimi-k2p6": {
+                            "cost": { "input": 0.6, "output": 2.5 }
+                        }
+                    }
+                },
+                "venice": {
+                    "models": {
+                        "claude-opus-5-fast": {
+                            "cost": { "input": 12, "output": 60 }
+                        }
+                    }
+                },
+                "openrouter": {
+                    "models": {
+                        "claude-3-haiku-20240307": {
+                            "cost": { "input": 0.25, "output": 1.25 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        // Only the retired first-party release loads: no trusted catalog serves it
+        // any more, which is the case reseller entries are kept for.
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        assert!(
+            pricing
+                .find_exact("accounts/fireworks/models/kimi-k2p6")
+                .is_none()
+        );
+        assert!(pricing.find_exact("claude-opus-5-fast").is_none());
+        assert!(pricing.find_exact("claude-3-haiku-20240307").is_some());
+    }
+
+    #[test]
     fn live_models_dev_pricing_prefers_the_more_detailed_entry_within_a_tier() {
         // Generation breaks same-tier ties by how much pricing detail an entry
         // carries, so the online path has to as well or the two disagree.
+        // `kimi-k2.6-nitro` is a separately priced tier of a carried model, so it
+        // is one of the ids resellers alone may supply. The ordering tests below
+        // use it for that reason.
         let json = r#"{
                 "302ai": {
                     "models": {
-                        "some-reseller-only-model": {
+                        "kimi-k2.6-nitro": {
                             "cost": { "input": 1, "output": 2 }
                         }
                     }
                 },
                 "openrouter": {
                     "models": {
-                        "some-reseller-only-model": {
+                        "kimi-k2.6-nitro": {
                             "cost": { "input": 1, "output": 2, "cache_read": 0.1 },
                             "limit": { "context": 128000 }
                         }
@@ -2333,13 +2479,64 @@ mod tests {
 
         // One model, counted once even though the second entry replaced the first.
         assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
-        let entry = pricing.find_exact("some-reseller-only-model").unwrap();
+        let entry = pricing.find_exact("kimi-k2.6-nitro").unwrap();
         assert!(entry.cache_read_explicit);
         assert!((entry.cache_read * 1e6 - 0.1).abs() < 1e-9);
         assert_eq!(
-            pricing.context_limits.get("some-reseller-only-model"),
+            pricing.context_limits.get("kimi-k2.6-nitro"),
             Some(&128_000)
         );
+    }
+
+    #[test]
+    fn live_models_dev_pricing_keeps_authored_token_models_a_catalog_mislabels() {
+        // A catalog serving claude-opus-5 as image-output would drop a model the
+        // snapshot carries. The authored classification settles it both ways, so
+        // only models the authored catalog never listed fall back to the live
+        // modalities.
+        let json = r#"{
+                "302ai": {
+                    "models": {
+                        "claude-opus-5": {
+                            "modalities": { "input": ["text"], "output": ["text", "image"] },
+                            "cost": { "input": 5, "output": 25 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        assert!(pricing.find_exact("claude-opus-5").is_some());
+    }
+
+    #[test]
+    fn live_models_dev_pricing_ranks_by_the_catalog_s_own_provider_id() {
+        // The generator reads `provider.id ?? providerId`, so a catalog filed
+        // under a different key than its id must still rank as its id - here the
+        // authoring catalog, which has to win over the reseller.
+        let json = r#"{
+                "aaa-filed-under-another-key": {
+                    "id": "moonshotai",
+                    "models": {
+                        "kimi-k2.6-nitro": {
+                            "cost": { "input": 3, "output": 4 }
+                        }
+                    }
+                },
+                "302ai": {
+                    "models": {
+                        "kimi-k2.6-nitro": {
+                            "cost": { "input": 1, "output": 2 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        let entry = pricing.find_exact("kimi-k2.6-nitro").unwrap();
+        assert!((entry.input * 1e6 - 3.0).abs() < 1e-9);
     }
 
     #[test]
@@ -2350,14 +2547,14 @@ mod tests {
         let json = r#"{
                 "302ai": {
                     "models": {
-                        "some-reseller-only-model": {
+                        "kimi-k2.6-nitro": {
                             "cost": { "input": 1, "output": 2, "cache_read": 0.1 }
                         }
                     }
                 },
                 "openrouter": {
                     "models": {
-                        "some-reseller-only-model": {
+                        "kimi-k2.6-nitro": {
                             "cost": { "input": 1, "output": 2, "cache_write": 1.25 },
                             "limit": { "context": 128000 }
                         }
@@ -2367,7 +2564,7 @@ mod tests {
         let mut pricing = PricingMap::default();
 
         assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
-        let entry = pricing.find_exact("some-reseller-only-model").unwrap();
+        let entry = pricing.find_exact("kimi-k2.6-nitro").unwrap();
         assert!(entry.cache_read_explicit);
         assert!((entry.cache_read * 1e6 - 0.1).abs() < 1e-9);
     }
@@ -2379,7 +2576,7 @@ mod tests {
         let json = r#"{
                 "302ai": {
                     "models": {
-                        "some-reseller-only-model": {
+                        "kimi-k2.6-nitro": {
                             "cost": { "input": 1, "output": 2 },
                             "limit": { "context": 128000 }
                         }
@@ -2387,7 +2584,7 @@ mod tests {
                 },
                 "moonshotai": {
                     "models": {
-                        "some-reseller-only-model": {
+                        "kimi-k2.6-nitro": {
                             "cost": { "input": 3, "output": 4 }
                         }
                     }
@@ -2396,9 +2593,9 @@ mod tests {
         let mut pricing = PricingMap::default();
 
         assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
-        let entry = pricing.find_exact("some-reseller-only-model").unwrap();
+        let entry = pricing.find_exact("kimi-k2.6-nitro").unwrap();
         assert!((entry.input * 1e6 - 3.0).abs() < 1e-9);
-        assert_eq!(pricing.context_limits.get("some-reseller-only-model"), None);
+        assert_eq!(pricing.context_limits.get("kimi-k2.6-nitro"), None);
     }
 
     #[test]
@@ -2430,11 +2627,20 @@ mod tests {
     #[test]
     fn live_models_dev_pricing_skips_flat_fee_catalogs() {
         // `kimi-for-coding` is a subscription plan, so it publishes zero token
-        // costs. Loading it would make the model free for everyone.
+        // costs. Loading it would make the model free for everyone. The rule is
+        // about the rates rather than about who publishes them, so an authoring
+        // catalog listing a zero-cost entry has to be skipped as well.
         let json = r#"{
                 "kimi-for-coding": {
                     "models": {
                         "kimi-for-coding": {
+                            "cost": { "input": 0, "output": 0 }
+                        }
+                    }
+                },
+                "moonshotai": {
+                    "models": {
+                        "kimi-k3": {
                             "cost": { "input": 0, "output": 0 }
                         }
                     }
@@ -2444,6 +2650,7 @@ mod tests {
 
         assert_eq!(pricing.load_models_dev_json_missing(json), Some(0));
         assert!(pricing.find_exact("kimi-for-coding").is_none());
+        assert!(pricing.find_exact("kimi-k3").is_none());
     }
 
     #[test]
