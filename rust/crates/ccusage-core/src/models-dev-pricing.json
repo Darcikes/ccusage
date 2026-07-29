@@ -1761,7 +1761,7 @@
 			"context": 1048756
 		}
 	},
-	"gemini-2.5-flash-nothing": {
+	"gemini-2.5-flash-nothink": {
 		"cost": {
 			"input": 0.3,
 			"output": 2.5
