@@ -1,4 +1,35 @@
 {
+	"GLM-4.6-Derestricted-v5": {
+		"cost": {
+			"input": 0.4,
+			"output": 1.5
+		},
+		"limit": {
+			"context": 131072
+		}
+	},
+	"GLM-5.1": {
+		"cost": {
+			"cache_read": 0.1,
+			"cache_write": 0,
+			"input": 1,
+			"output": 3.2
+		},
+		"limit": {
+			"context": 202752
+		}
+	},
+	"GLM-5.2": {
+		"cost": {
+			"cache_read": 0.2,
+			"cache_write": 0,
+			"input": 1.2,
+			"output": 4.1
+		},
+		"limit": {
+			"context": 1048576
+		}
+	},
 	"MiniMax-M2": {
 		"cost": {
 			"input": 0.3,
@@ -69,6 +100,276 @@
 		},
 		"limit": {
 			"context": 1000000
+		}
+	},
+	"Qwen3.5-27B-Anko": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-BlueStar-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-BlueStar-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-BlueStar-v2-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-BlueStar-v2-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-BlueStar-v3-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-BlueStar-v3-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Infracelestial": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Marvin-DPO-V2-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Marvin-DPO-V2-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Marvin-V2-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Marvin-V2-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Musica-v1": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-NaNovel-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-NaNovel-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Omega-Evolution-v2.0-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Omega-Evolution-v2.0-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Omega-Evolution-v2.2-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Omega-Evolution-v2.2-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Queen-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Queen-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-RpRMax-v1": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Vivid-Durian": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Writer-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Writer-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Writer-V2-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-Writer-V2-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-earica-Derestricted": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"Qwen3.5-27B-earica-Derestricted-Lite": {
+		"cost": {
+			"input": 0.306,
+			"output": 0.306
+		},
+		"limit": {
+			"context": 262144
 		}
 	},
 	"amazon.nova-2-lite-v1:0": {
@@ -370,6 +671,16 @@
 			"context": 200000
 		}
 	},
+	"claude-haiku-4-5-20251001-thinking": {
+		"cost": {
+			"cache_read": 0.1,
+			"input": 1,
+			"output": 5
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
 	"claude-haiku-4-5@20251001": {
 		"cost": {
 			"cache_read": 0.1,
@@ -398,6 +709,60 @@
 			"cache_write": 18.75,
 			"input": 15,
 			"output": 75
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-1-20250805-thinking": {
+		"cost": {
+			"input": 15,
+			"output": 75
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-1-thinking": {
+		"cost": {
+			"input": 14.994,
+			"output": 75.004
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-1-thinking:1024": {
+		"cost": {
+			"input": 14.994,
+			"output": 75.004
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-1-thinking:32000": {
+		"cost": {
+			"input": 14.994,
+			"output": 75.004
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-1-thinking:32768": {
+		"cost": {
+			"input": 14.994,
+			"output": 75.004
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-1-thinking:8192": {
+		"cost": {
+			"input": 14.994,
+			"output": 75.004
 		},
 		"limit": {
 			"context": 200000
@@ -445,6 +810,24 @@
 			"context": 200000
 		}
 	},
+	"claude-opus-4-5-20251101-thinking": {
+		"cost": {
+			"input": 5,
+			"output": 25
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"claude-opus-4-5-20251101:thinking": {
+		"cost": {
+			"input": 4.998,
+			"output": 25.007
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
 	"claude-opus-4-5@20251101": {
 		"cost": {
 			"cache_read": 0.5,
@@ -467,6 +850,26 @@
 			"context": 1000000
 		}
 	},
+	"claude-opus-4-6-think": {
+		"cost": {
+			"cache_read": 0.5,
+			"cache_write": 6.25,
+			"input": 5,
+			"output": 25
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"claude-opus-4-6-thinking": {
+		"cost": {
+			"input": 5,
+			"output": 25
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
 	"claude-opus-4-6@default": {
 		"cost": {
 			"cache_read": 0.5,
@@ -479,6 +882,17 @@
 		}
 	},
 	"claude-opus-4-7": {
+		"cost": {
+			"cache_read": 0.5,
+			"cache_write": 6.25,
+			"input": 5,
+			"output": 25
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"claude-opus-4-7-think": {
 		"cost": {
 			"cache_read": 0.5,
 			"cache_write": 6.25,
@@ -509,6 +923,17 @@
 		},
 		"limit": {
 			"context": 1000000
+		}
+	},
+	"claude-opus-4-8-think": {
+		"cost": {
+			"cache_read": 0.5,
+			"cache_write": 6.25,
+			"input": 5,
+			"output": 25
+		},
+		"limit": {
+			"context": 200000
 		}
 	},
 	"claude-opus-4-8@default": {
@@ -586,6 +1011,15 @@
 			"context": 1000000
 		}
 	},
+	"claude-sonnet-4-5-20250929-thinking": {
+		"cost": {
+			"input": 3,
+			"output": 15
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
 	"claude-sonnet-4-5@20250929": {
 		"cost": {
 			"cache_read": 0.3,
@@ -601,6 +1035,26 @@
 		"cost": {
 			"cache_read": 0.3,
 			"cache_write": 3.75,
+			"input": 3,
+			"output": 15
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"claude-sonnet-4-6-think": {
+		"cost": {
+			"cache_read": 0.3,
+			"cache_write": 3.75,
+			"input": 3,
+			"output": 15
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"claude-sonnet-4-6-thinking": {
+		"cost": {
 			"input": 3,
 			"output": 15
 		},
@@ -846,6 +1300,15 @@
 			"context": 1000000
 		}
 	},
+	"deepseek-chat-cheaper": {
+		"cost": {
+			"input": 0.25,
+			"output": 0.7
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
 	"deepseek-r1": {
 		"cost": {
 			"input": 1.35,
@@ -853,6 +1316,60 @@
 		},
 		"limit": {
 			"context": 163840
+		}
+	},
+	"deepseek-r1-0528": {
+		"cost": {
+			"input": 0.574,
+			"output": 2.294
+		},
+		"limit": {
+			"context": 131072
+		}
+	},
+	"deepseek-r1-distill-llama-70b": {
+		"cost": {
+			"input": 0.287,
+			"output": 0.861
+		},
+		"limit": {
+			"context": 32768
+		}
+	},
+	"deepseek-r1-distill-qwen-14b": {
+		"cost": {
+			"input": 0.144,
+			"output": 0.431
+		},
+		"limit": {
+			"context": 32768
+		}
+	},
+	"deepseek-r1-distill-qwen-32b": {
+		"cost": {
+			"input": 0.287,
+			"output": 0.861
+		},
+		"limit": {
+			"context": 32768
+		}
+	},
+	"deepseek-r1-distill-qwen-7b": {
+		"cost": {
+			"input": 0.072,
+			"output": 0.144
+		},
+		"limit": {
+			"context": 32768
+		}
+	},
+	"deepseek-r1-sambanova": {
+		"cost": {
+			"input": 4.998,
+			"output": 6.987
+		},
+		"limit": {
+			"context": 128000
 		}
 	},
 	"deepseek-reasoner": {
@@ -863,6 +1380,15 @@
 		},
 		"limit": {
 			"context": 1000000
+		}
+	},
+	"deepseek-reasoner-cheaper": {
+		"cost": {
+			"input": 0.4,
+			"output": 1.7
+		},
+		"limit": {
+			"context": 128000
 		}
 	},
 	"deepseek-v3.2": {
@@ -898,6 +1424,16 @@
 			"cache_read": 0.003625,
 			"input": 0.435,
 			"output": 0.87
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"deepseek-v4-pro-lightning": {
+		"cost": {
+			"cache_read": 0.02,
+			"input": 0.8,
+			"output": 1.6
 		},
 		"limit": {
 			"context": 1000000
@@ -1124,6 +1660,24 @@
 			"context": 1048576
 		}
 	},
+	"gemini-2.0-flash-001": {
+		"cost": {
+			"input": 0.1003,
+			"output": 0.408
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"gemini-2.0-flash-exp-image-generation": {
+		"cost": {
+			"input": 0.2,
+			"output": 0.8
+		},
+		"limit": {
+			"context": 32767
+		}
+	},
 	"gemini-2.0-flash-lite": {
 		"cost": {
 			"input": 0.075,
@@ -1131,6 +1685,24 @@
 		},
 		"limit": {
 			"context": 1048576
+		}
+	},
+	"gemini-2.0-flash-thinking-exp-01-21": {
+		"cost": {
+			"input": 0.306,
+			"output": 1.003
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"gemini-2.0-flash-thinking-exp-1219": {
+		"cost": {
+			"input": 0.1003,
+			"output": 0.408
+		},
+		"limit": {
+			"context": 32767
 		}
 	},
 	"gemini-2.5-computer-use-preview-10-2025": {
@@ -1162,6 +1734,105 @@
 			"context": 1048576
 		}
 	},
+	"gemini-2.5-flash-lite-preview-06-17": {
+		"cost": {
+			"input": 0.09,
+			"output": 0.36
+		},
+		"limit": {
+			"context": 1048576
+		}
+	},
+	"gemini-2.5-flash-lite-preview-09-2025": {
+		"cost": {
+			"input": 0.1,
+			"output": 0.4
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"gemini-2.5-flash-lite-preview-09-2025-thinking": {
+		"cost": {
+			"input": 0.1,
+			"output": 0.4
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-flash-nothing": {
+		"cost": {
+			"input": 0.3,
+			"output": 2.5
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"gemini-2.5-flash-nothinking": {
+		"cost": {
+			"input": 0.3,
+			"output": 2.5
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-flash-preview-04-17": {
+		"cost": {
+			"input": 0.15,
+			"output": 0.6
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-flash-preview-04-17:thinking": {
+		"cost": {
+			"input": 0.15,
+			"output": 3.5
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-flash-preview-05-20": {
+		"cost": {
+			"input": 0.135,
+			"output": 3.15
+		},
+		"limit": {
+			"context": 1048576
+		}
+	},
+	"gemini-2.5-flash-preview-05-20:thinking": {
+		"cost": {
+			"input": 0.15,
+			"output": 3.5
+		},
+		"limit": {
+			"context": 1048000
+		}
+	},
+	"gemini-2.5-flash-preview-09-2025": {
+		"cost": {
+			"input": 0.3,
+			"output": 2.5
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
+	"gemini-2.5-flash-preview-09-2025-thinking": {
+		"cost": {
+			"input": 0.3,
+			"output": 2.5
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
 	"gemini-2.5-pro": {
 		"cost": {
 			"cache_read": 0.125,
@@ -1170,6 +1841,52 @@
 		},
 		"limit": {
 			"context": 1048576
+		}
+	},
+	"gemini-2.5-pro-exp-03-25": {
+		"cost": {
+			"input": 2.5,
+			"output": 10
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-pro-preview-03-25": {
+		"cost": {
+			"input": 2.5,
+			"output": 10
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-pro-preview-05-06": {
+		"cost": {
+			"input": 2.5,
+			"output": 10
+		},
+		"limit": {
+			"context": 1048756
+		}
+	},
+	"gemini-2.5-pro-preview-06-05": {
+		"cost": {
+			"input": 1.125,
+			"output": 9
+		},
+		"limit": {
+			"context": 1048576
+		}
+	},
+	"gemini-3-5-flash-lite": {
+		"cost": {
+			"cache_read": 0.0375,
+			"input": 0.375,
+			"output": 3.125
+		},
+		"limit": {
+			"context": 1000000
 		}
 	},
 	"gemini-3-flash-preview": {
@@ -1351,6 +2068,26 @@
 			"context": 131072
 		}
 	},
+	"glm-4.5-airx": {
+		"cost": {
+			"cache_read": 0.22,
+			"input": 1.1,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
+	"glm-4.5-x": {
+		"cost": {
+			"cache_read": 0.45,
+			"input": 2.2,
+			"output": 8.9
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
 	"glm-4.5v": {
 		"cost": {
 			"input": 0.6,
@@ -1375,6 +2112,16 @@
 		"cost": {
 			"input": 0.3,
 			"output": 0.9
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
+	"glm-4.6v-flashx": {
+		"cost": {
+			"cache_read": 0.004,
+			"input": 0.04,
+			"output": 0.4
 		},
 		"limit": {
 			"context": 128000
@@ -1424,6 +2171,26 @@
 			"context": 204800
 		}
 	},
+	"glm-5-1": {
+		"cost": {
+			"cache_read": 0.165,
+			"input": 0.825,
+			"output": 3.301
+		},
+		"limit": {
+			"context": 202000
+		}
+	},
+	"glm-5-2": {
+		"cost": {
+			"cache_read": 1.4,
+			"input": 1.4,
+			"output": 4.4
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
 	"glm-5-turbo": {
 		"cost": {
 			"cache_read": 0.24,
@@ -1455,6 +2222,75 @@
 		},
 		"limit": {
 			"context": 1000000
+		}
+	},
+	"glm-5.2-fast": {
+		"cost": {
+			"cache_read": 0.3625,
+			"input": 1.45,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 1048560
+		}
+	},
+	"glm-5.2-flex": {
+		"cost": {
+			"cache_read": 0.18125,
+			"input": 0.725,
+			"output": 2.25
+		},
+		"limit": {
+			"context": 1048560
+		}
+	},
+	"glm-5.2-nitro": {
+		"cost": {
+			"input": 0.8,
+			"output": 2.4
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"glm-5.2-short": {
+		"cost": {
+			"cache_read": 0.3625,
+			"input": 1.45,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 199984
+		}
+	},
+	"glm-5.2-short-fast": {
+		"cost": {
+			"cache_read": 0.3625,
+			"input": 1.45,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 199984
+		}
+	},
+	"glm-5.2-short-fast-flex": {
+		"cost": {
+			"cache_read": 0.18125,
+			"input": 0.725,
+			"output": 2.25
+		},
+		"limit": {
+			"context": 199984
+		}
+	},
+	"glm-5.2-short-flex": {
+		"cost": {
+			"cache_read": 0.18125,
+			"input": 0.725,
+			"output": 2.25
+		},
+		"limit": {
+			"context": 199984
 		}
 	},
 	"glm-5v-turbo": {
@@ -1689,6 +2525,16 @@
 			"context": 1047576
 		}
 	},
+	"gpt-4.1-mini-2025-04-14": {
+		"cost": {
+			"cache_read": 0.09999999999999999,
+			"input": 0.39999999999999997,
+			"output": 1.5999999999999999
+		},
+		"limit": {
+			"context": 1047576
+		}
+	},
 	"gpt-4.1-nano": {
 		"cost": {
 			"cache_read": 0.025,
@@ -1748,6 +2594,42 @@
 			"context": 128000
 		}
 	},
+	"gpt-4o-mini-search-preview": {
+		"cost": {
+			"input": 0.15,
+			"output": 0.6
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
+	"gpt-4o-mini-transcribe": {
+		"cost": {
+			"input": 1.25,
+			"output": 5
+		},
+		"limit": {
+			"context": 16000
+		}
+	},
+	"gpt-4o-search-preview": {
+		"cost": {
+			"input": 2.5,
+			"output": 10
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
+	"gpt-4o-transcribe": {
+		"cost": {
+			"input": 2.5,
+			"output": 10
+		},
+		"limit": {
+			"context": 16000
+		}
+	},
 	"gpt-5": {
 		"cost": {
 			"cache_read": 0.125,
@@ -1756,6 +2638,46 @@
 		},
 		"limit": {
 			"context": 400000
+		}
+	},
+	"gpt-5-3-codex": {
+		"cost": {
+			"cache_read": 0.175,
+			"input": 1.75,
+			"output": 14
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
+	"gpt-5-4-mini": {
+		"cost": {
+			"cache_read": 0.075,
+			"input": 0.75,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
+	"gpt-5-4-nano": {
+		"cost": {
+			"cache_read": 0.02,
+			"input": 0.2,
+			"output": 1.25
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
+	"gpt-5-5": {
+		"cost": {
+			"cache_read": 0.25,
+			"input": 2.5,
+			"output": 15
+		},
+		"limit": {
+			"context": 272000
 		}
 	},
 	"gpt-5-chat-latest": {
@@ -1802,6 +2724,15 @@
 		"cost": {
 			"input": 15,
 			"output": 120
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
+	"gpt-5-thinking": {
+		"cost": {
+			"input": 1.25,
+			"output": 10
 		},
 		"limit": {
 			"context": 400000
@@ -1926,6 +2857,15 @@
 			"context": 128000
 		}
 	},
+	"gpt-5.3-codex-xhigh": {
+		"cost": {
+			"input": 1.75,
+			"output": 14
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
 	"gpt-5.4": {
 		"cost": {
 			"cache_read": 0.25,
@@ -1946,9 +2886,27 @@
 			"context": 400000
 		}
 	},
+	"gpt-5.4-mini-2026-03-17": {
+		"cost": {
+			"input": 0.75,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
 	"gpt-5.4-nano": {
 		"cost": {
 			"cache_read": 0.02,
+			"input": 0.2,
+			"output": 1.25
+		},
+		"limit": {
+			"context": 400000
+		}
+	},
+	"gpt-5.4-nano-2026-03-17": {
+		"cost": {
 			"input": 0.2,
 			"output": 1.25
 		},
@@ -2291,6 +3249,16 @@
 			"context": 262144
 		}
 	},
+	"kimi-k2-7-code-highspeed": {
+		"cost": {
+			"cache_read": 1.9,
+			"input": 1.9,
+			"output": 8
+		},
+		"limit": {
+			"context": 256000
+		}
+	},
 	"kimi-k2-thinking": {
 		"cost": {
 			"cache_read": 0.15,
@@ -2331,6 +3299,26 @@
 			"context": 262144
 		}
 	},
+	"kimi-k2.5-fast": {
+		"cost": {
+			"cache_read": 0.13,
+			"input": 0.52,
+			"output": 2.59
+		},
+		"limit": {
+			"context": 262128
+		}
+	},
+	"kimi-k2.5-lightning": {
+		"cost": {
+			"cache_read": 0.2,
+			"input": 1,
+			"output": 3
+		},
+		"limit": {
+			"context": 131072
+		}
+	},
 	"kimi-k2.6": {
 		"cost": {
 			"cache_read": 0.16,
@@ -2341,11 +3329,59 @@
 			"context": 262144
 		}
 	},
+	"kimi-k2.6-fast": {
+		"cost": {
+			"cache_read": 0.1725,
+			"input": 0.69,
+			"output": 3.22
+		},
+		"limit": {
+			"context": 262128
+		}
+	},
+	"kimi-k2.6-flex": {
+		"cost": {
+			"cache_read": 0.08625,
+			"input": 0.345,
+			"output": 1.61
+		},
+		"limit": {
+			"context": 262128
+		}
+	},
+	"kimi-k2.6-nitro": {
+		"cost": {
+			"input": 0.275,
+			"output": 1.1
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
 	"kimi-k2.7-code": {
 		"cost": {
 			"cache_read": 0.19,
 			"input": 0.95,
 			"output": 4
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"kimi-k2.7-code-1100b": {
+		"cost": {
+			"input": 0.86,
+			"output": 3
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"kimi-k2.7-code-flex": {
+		"cost": {
+			"cache_read": 0.11875,
+			"input": 0.475,
+			"output": 2
 		},
 		"limit": {
 			"context": 262144
@@ -2361,6 +3397,15 @@
 			"context": 262144
 		}
 	},
+	"kimi-k2.7-code-nitro": {
+		"cost": {
+			"input": 0.275,
+			"output": 1.1
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
 	"kimi-k3": {
 		"cost": {
 			"cache_read": 0.3,
@@ -2369,6 +3414,16 @@
 		},
 		"limit": {
 			"context": 1048576
+		}
+	},
+	"kimi-k3-eco": {
+		"cost": {
+			"cache_read": 0.1,
+			"input": 1,
+			"output": 4
+		},
+		"limit": {
+			"context": 1000000
 		}
 	},
 	"llama-3.1-nemotron-ultra-253b": {
@@ -2443,6 +3498,16 @@
 			"context": 128000
 		}
 	},
+	"mai-code-1-flash-picker": {
+		"cost": {
+			"cache_read": 0.075,
+			"input": 0.75,
+			"output": 4.5
+		},
+		"limit": {
+			"context": 256000
+		}
+	},
 	"meta.llama3-1-70b-instruct-v1:0": {
 		"cost": {
 			"input": 0.72,
@@ -2506,6 +3571,16 @@
 			"context": 524288
 		}
 	},
+	"mimo-v2-5-pro": {
+		"cost": {
+			"cache_read": 0.018,
+			"input": 2.175,
+			"output": 4.35
+		},
+		"limit": {
+			"context": 1000000
+		}
+	},
 	"mimo-v2-flash": {
 		"cost": {
 			"cache_read": 0.0028,
@@ -2564,6 +3639,118 @@
 		},
 		"limit": {
 			"context": 1048576
+		}
+	},
+	"minimax-m2-5": {
+		"cost": {
+			"cache_read": 0.03,
+			"input": 0.3,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 192000
+		}
+	},
+	"minimax-m2-7": {
+		"cost": {
+			"cache_read": 0.03,
+			"input": 0.15,
+			"output": 0.6
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"minimax-m2-7-highspeed": {
+		"cost": {
+			"cache_read": 0.03,
+			"input": 0.3,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 200000
+		}
+	},
+	"minimax-m2.1": {
+		"cost": {
+			"cache_read": 0.1,
+			"input": 0.3,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 204800
+		}
+	},
+	"minimax-m2.1-lightning": {
+		"cost": {
+			"input": 0.12,
+			"output": 0.48
+		},
+		"limit": {
+			"context": 196608
+		}
+	},
+	"minimax-m2.5": {
+		"cost": {
+			"cache_read": 0.02,
+			"cache_write": 0.375,
+			"input": 0.11,
+			"output": 0.95
+		},
+		"limit": {
+			"context": 204800
+		}
+	},
+	"minimax-m2.5-230b": {
+		"cost": {
+			"input": 0.25,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 196608
+		}
+	},
+	"minimax-m2.5-highspeed": {
+		"cost": {
+			"cache_read": 0.03,
+			"cache_write": 0.375,
+			"input": 0.6,
+			"output": 2.4
+		},
+		"limit": {
+			"context": 204800
+		}
+	},
+	"minimax-m2.7": {
+		"cost": {
+			"cache_read": 0.06,
+			"cache_write": 0.375,
+			"input": 0.3,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 204800
+		}
+	},
+	"minimax-m2.7-highspeed": {
+		"cost": {
+			"cache_read": 0.06,
+			"cache_write": 0.375,
+			"input": 0.6,
+			"output": 2.4
+		},
+		"limit": {
+			"context": 204800
+		}
+	},
+	"minimax-m3-preview": {
+		"cost": {
+			"cache_read": 0.06,
+			"input": 0.3,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 524288
 		}
 	},
 	"minimax.minimax-m2": {
@@ -2696,6 +3883,15 @@
 		"cost": {
 			"input": 0.15,
 			"output": 0.15
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
+	"mistral-nemo-instruct-2407": {
+		"cost": {
+			"input": 0.3,
+			"output": 0.3
 		},
 		"limit": {
 			"context": 128000
@@ -2945,6 +4141,16 @@
 		},
 		"limit": {
 			"context": 200000
+		}
+	},
+	"o1-mini": {
+		"cost": {
+			"cache_read": 0.55,
+			"input": 1.1,
+			"output": 4.4
+		},
+		"limit": {
+			"context": 128000
 		}
 	},
 	"o1-pro": {
@@ -3219,6 +4425,15 @@
 			"context": 128000
 		}
 	},
+	"pixtral-12b-2409": {
+		"cost": {
+			"input": 0.285,
+			"output": 0.285
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
 	"pixtral-large-latest": {
 		"cost": {
 			"input": 2,
@@ -3255,6 +4470,15 @@
 			"context": 32768
 		}
 	},
+	"qwen-max-latest": {
+		"cost": {
+			"input": 0.343,
+			"output": 1.372
+		},
+		"limit": {
+			"context": 131072
+		}
+	},
 	"qwen-mt-plus": {
 		"cost": {
 			"input": 2.46,
@@ -3282,6 +4506,15 @@
 			"context": 1000000
 		}
 	},
+	"qwen-plus-character": {
+		"cost": {
+			"input": 0.115,
+			"output": 0.287
+		},
+		"limit": {
+			"context": 32768
+		}
+	},
 	"qwen-plus-character-ja": {
 		"cost": {
 			"input": 0.5,
@@ -3289,6 +4522,17 @@
 		},
 		"limit": {
 			"context": 8192
+		}
+	},
+	"qwen-plus-latest": {
+		"cost": {
+			"cache_read": 0.08,
+			"cache_write": 0.5,
+			"input": 0.4,
+			"output": 1.2
+		},
+		"limit": {
+			"context": 1000000
 		}
 	},
 	"qwen-turbo": {
@@ -3471,6 +4715,42 @@
 			"context": 131072
 		}
 	},
+	"qwen3-235b-a22b-fp8": {
+		"cost": {
+			"input": 0.2,
+			"output": 0.8
+		},
+		"limit": {
+			"context": 40960
+		}
+	},
+	"qwen3-235b-a22b-instruct-2507": {
+		"cost": {
+			"input": 0.29,
+			"output": 1.143
+		},
+		"limit": {
+			"context": 128000
+		}
+	},
+	"qwen3-235b-a22b-thinking": {
+		"cost": {
+			"input": 0.3,
+			"output": 2.9000000000000004
+		},
+		"limit": {
+			"context": 262144
+		}
+	},
+	"qwen3-235b-a22b-thinking-2507": {
+		"cost": {
+			"input": 0.3,
+			"output": 3
+		},
+		"limit": {
+			"context": 262000
+		}
+	},
 	"qwen3-32b": {
 		"cost": {
 			"input": 0.7,
@@ -3507,6 +4787,26 @@
 			"context": 262144
 		}
 	},
+	"qwen3-coder-480b-a35b-instruct-int4-mixed-ar": {
+		"cost": {
+			"cache_write": 0.2845,
+			"input": 0.569,
+			"output": 2.135
+		},
+		"limit": {
+			"context": 106000
+		}
+	},
+	"qwen3-coder-480b-a35b-instruct-turbo": {
+		"cost": {
+			"cache_read": 0.04,
+			"input": 0.35,
+			"output": 1.5
+		},
+		"limit": {
+			"context": 256000
+		}
+	},
 	"qwen3-coder-flash": {
 		"cost": {
 			"input": 0.3,
@@ -3532,6 +4832,24 @@
 		},
 		"limit": {
 			"context": 262144
+		}
+	},
+	"qwen3-max-2025-09-23": {
+		"cost": {
+			"input": 0.86,
+			"output": 3.43
+		},
+		"limit": {
+			"context": 258048
+		}
+	},
+	"qwen3-max-2026-01-23": {
+		"cost": {
+			"input": 1.2002,
+			"output": 6.001
+		},
+		"limit": {
+			"context": 256000
 		}
 	},
 	"qwen3-next-80b-a3b-instruct": {
@@ -3762,6 +5080,15 @@
 			"context": 200000
 		}
 	},
+	"sonar-reasoning": {
+		"cost": {
+			"input": 1,
+			"output": 5
+		},
+		"limit": {
+			"context": 127000
+		}
+	},
 	"sonar-reasoning-pro": {
 		"cost": {
 			"input": 2,
@@ -3789,6 +5116,16 @@
 		},
 		"limit": {
 			"context": 16384
+		}
+	},
+	"step-3-5-flash-2603": {
+		"cost": {
+			"cache_read": 0.02,
+			"input": 0.1,
+			"output": 0.3
+		},
+		"limit": {
+			"context": 256000
 		}
 	},
 	"step-3.5-flash": {

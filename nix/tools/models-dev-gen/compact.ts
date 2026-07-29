@@ -67,6 +67,10 @@ export type ModelsDevCatalogIndex = {
 	authorProviderIds: ReadonlySet<string>;
 	/** The same keys with the author prefix stripped. */
 	authoredModelIds: ReadonlySet<string>;
+	/** `authoredModelIds` normalized for prefix comparison. */
+	normalizedAuthoredModelIds: readonly string[];
+	/** Normalized authored id -> the modes that id publishes its own rates for. */
+	authoredModes: ReadonlyMap<string, ReadonlySet<string>>;
 	/** Authored modalities by bare model id. */
 	authoredModalities: ReadonlyMap<string, ModelsDevModalities>;
 };
@@ -83,13 +87,28 @@ export type ModelsDevPricingCandidate = {
 /**
  * Build the authorship index from the canonical catalog.
  *
+ * `providerCatalogs` is read only for the modes an authoring provider prices
+ * itself, because those live in `providers/<author>/models/<id>.toml` rather
+ * than in the `models/` metadata.
+ *
  * @param authoredModels - `<author>/<id>` keyed models from `generateCatalog().models`.
+ * @param providerCatalogs - provider id keyed catalogs from `generateCatalog().providers`.
  * @example
  * const index = buildModelsDevCatalogIndex({ 'anthropic/claude-opus-5': {} });
  * index.authorProviderIds.has('anthropic'); // true
  */
 export function buildModelsDevCatalogIndex(
 	authoredModels: Readonly<Record<string, { modalities?: ModelsDevModalities }>>,
+	providerCatalogs: Readonly<
+		Record<
+			string,
+			{
+				models?: Readonly<
+					Record<string, { experimental?: { modes?: Readonly<Record<string, unknown>> } }>
+				>;
+			}
+		>
+	> = {},
 ): ModelsDevCatalogIndex {
 	const authorProviderIds = new Set<string>();
 	const authoredModelIds = new Set<string>();
@@ -106,12 +125,71 @@ export function buildModelsDevCatalogIndex(
 			authoredModalities.set(modelId, model.modalities);
 		}
 	}
+	const authoredModes = new Map<string, Set<string>>();
+	for (const [providerId, catalog] of Object.entries(providerCatalogs)) {
+		if (
+			!authorProviderIds.has(providerId) &&
+			!(FIRST_PARTY_PROVIDER_ID_ALIASES as readonly string[]).includes(providerId)
+		) {
+			continue;
+		}
+		for (const [modelId, model] of Object.entries(catalog.models ?? {})) {
+			const modes = Object.keys(model.experimental?.modes ?? {}).map(normalizeModelId);
+			if (modes.length === 0) {
+				continue;
+			}
+			const normalized = normalizeModelId(modelId);
+			const existing = authoredModes.get(normalized) ?? new Set<string>();
+			for (const mode of modes) {
+				existing.add(mode);
+			}
+			authoredModes.set(normalized, existing);
+		}
+	}
 	return {
 		authoredKeys: new Set(Object.keys(authoredModels)),
 		authorProviderIds,
 		authoredModelIds,
+		normalizedAuthoredModelIds: [...authoredModelIds].map(normalizeModelId),
+		authoredModes,
 		authoredModalities,
 	};
+}
+
+/** Model ids are spelled with either dots or dashes for the same version. */
+function normalizeModelId(modelId: string): string {
+	return modelId.toLowerCase().replace(/\./g, '-');
+}
+
+/**
+ * Whether a reseller-only id names a tier of a model the snapshot already
+ * carries - `kimi-k2.6-nitro`, `glm-5.2-flex`, `claude-opus-4-6-think`.
+ *
+ * Those are separately priced routes, usually cheaper than the author's list
+ * rate, so resolving them to the base model by name similarity over-reports
+ * their cost. Only bare ids qualify: an id carrying a provider path is that
+ * provider's own catalogue entry for a model, not a distinct tier of it.
+ *
+ * A tier the author prices itself does not qualify, because then the reseller's
+ * rate is a markup on a published rate rather than the only rate available:
+ * `claude-opus-5-fast` exists solely in one reseller catalog at 12 USD/Mtok
+ * while Anthropic's own fast rate is 10.
+ */
+export function isTierVariantOfAuthoredModel(
+	sourceModelId: string,
+	index: ModelsDevCatalogIndex,
+): boolean {
+	if (sourceModelId.includes('/')) {
+		return false;
+	}
+	const normalized = normalizeModelId(sourceModelId);
+	return index.normalizedAuthoredModelIds.some((authored) => {
+		if (!normalized.startsWith(`${authored}-`)) {
+			return false;
+		}
+		const tier = normalized.slice(authored.length + 1);
+		return !index.authoredModes.get(authored)?.has(tier);
+	});
 }
 
 /**
@@ -149,13 +227,15 @@ export function modelsDevProviderTrust({
 /**
  * Whether a candidate belongs in the embedded snapshot at all.
  *
- * Trusted catalogs are always embedded. Reseller catalogs are embedded only for
- * models the authored catalog knows about, which keeps retired first-party
- * models that only resellers still list while dropping the reseller-invented
- * aliases and speed tiers that make up most of their entries.
+ * Trusted catalogs are always embedded. A reseller catalog is embedded when the
+ * authored catalog knows the model - which is what keeps retired first-party
+ * releases only resellers still list - or when the id names a separately priced
+ * tier of a model already carried. Everything else is a reseller's own alias for
+ * a model some trusted catalog publishes anyway.
  *
  * @example
- * isEmbeddableModelsDevCandidate({ trust: 1, sourceModelId: 'kimi-k2.6-nitro', index }); // false
+ * isEmbeddableModelsDevCandidate({ trust: 1, sourceModelId: 'accounts/fireworks/models/kimi-k2p6', index });
+ * // false
  */
 export function isEmbeddableModelsDevCandidate({
 	trust,
@@ -169,7 +249,9 @@ export function isEmbeddableModelsDevCandidate({
 	if (trust > MODELS_DEV_PROVIDER_TRUST.reseller) {
 		return true;
 	}
-	return index.authoredModelIds.has(sourceModelId);
+	return (
+		index.authoredModelIds.has(sourceModelId) || isTierVariantOfAuthoredModel(sourceModelId, index)
+	);
 }
 
 /**

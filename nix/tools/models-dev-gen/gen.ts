@@ -39,6 +39,7 @@ type Model = {
 	cost?: Cost;
 	limit?: { context?: number | null };
 	modalities?: { input?: readonly string[]; output?: readonly string[] };
+	experimental?: { modes?: Readonly<Record<string, unknown>> };
 };
 type ModelMetadata = {
 	id?: string;
@@ -60,7 +61,7 @@ const { models, providers } = (await generateCatalog('.')) as {
 	providers: Record<string, Provider>;
 };
 
-const catalogIndex = buildModelsDevCatalogIndex(models);
+const catalogIndex = buildModelsDevCatalogIndex(models, providers);
 
 const selected: Record<string, { candidate: ModelsDevPricingCandidate; entry: EmbeddedModel }> = {};
 for (const [providerId, provider] of sortedEntries(providers)) {

@@ -5,6 +5,7 @@ import {
 	formatDuplicateModelsDevPricingKeyWarning,
 	isEmbeddableModelsDevCandidate,
 	isPriceableModelsDevCost,
+	isTierVariantOfAuthoredModel,
 	isTokenPricedModel,
 	MODELS_DEV_PROVIDER_TRUST,
 	modelsDevProviderTrust,
@@ -13,19 +14,29 @@ import {
 	selectModelsDevPricingKey,
 } from './compact.ts';
 
-const index = buildModelsDevCatalogIndex({
-	'anthropic/claude-opus-5': { modalities: { input: ['text', 'image', 'pdf'], output: ['text'] } },
-	'anthropic/claude-3-5-haiku-20241022': { modalities: { input: ['text'], output: ['text'] } },
-	'moonshotai/kimi-k2.7-code': {
-		modalities: { input: ['text', 'image', 'video'], output: ['text'] },
+const index = buildModelsDevCatalogIndex(
+	{
+		'anthropic/claude-opus-5': {
+			modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+		},
+		'anthropic/claude-3-5-haiku-20241022': { modalities: { input: ['text'], output: ['text'] } },
+		'moonshotai/kimi-k2.7-code': {
+			modalities: { input: ['text', 'image', 'video'], output: ['text'] },
+		},
+		'xai/grok-build-0.1': { modalities: { input: ['text', 'image'], output: ['text'] } },
+		'zhipuai/glm-5-turbo': { modalities: { input: ['text'], output: ['text'] } },
+		'openai/whisper-large-v3': { modalities: { input: ['audio'], output: ['text'] } },
+		'google/gemini-2.5-flash-image': {
+			modalities: { input: ['text', 'image'], output: ['text', 'image'] },
+		},
 	},
-	'xai/grok-build-0.1': { modalities: { input: ['text', 'image'], output: ['text'] } },
-	'zhipuai/glm-5-turbo': { modalities: { input: ['text'], output: ['text'] } },
-	'openai/whisper-large-v3': { modalities: { input: ['audio'], output: ['text'] } },
-	'google/gemini-2.5-flash-image': {
-		modalities: { input: ['text', 'image'], output: ['text', 'image'] },
+	{
+		// Anthropic prices its own fast mode, which lives in the provider catalog
+		// rather than in the authored metadata.
+		anthropic: { models: { 'claude-opus-5': { experimental: { modes: { fast: {} } } } } },
+		venice: { models: { 'claude-opus-5-fast': {} } },
 	},
-});
+);
 
 void it('indexes authoring providers and bare model ids from the catalog keys', () => {
 	assert.deepEqual([...index.authorProviderIds].sort(), [
@@ -158,7 +169,7 @@ void it('uses a stable source ordering tie-break within one trust tier', () => {
 	);
 });
 
-void it('keeps reseller entries only for models the catalog knows', () => {
+void it('keeps reseller entries for retired models only resellers still list', () => {
 	assert.equal(
 		isEmbeddableModelsDevCandidate({
 			trust: MODELS_DEV_PROVIDER_TRUST.reseller,
@@ -167,10 +178,48 @@ void it('keeps reseller entries only for models the catalog knows', () => {
 		}),
 		true,
 	);
+});
+
+void it('drops a reseller alias for a model a trusted catalog already publishes', () => {
 	assert.equal(
 		isEmbeddableModelsDevCandidate({
 			trust: MODELS_DEV_PROVIDER_TRUST.reseller,
-			sourceModelId: 'kimi-k2.6-nitro',
+			sourceModelId: 'accounts/fireworks/models/kimi-k2p7-code',
+			index,
+		}),
+		false,
+	);
+});
+
+void it('keeps separately priced tiers of a model already carried', () => {
+	// kimi-k2.7-code-nitro is its own cheaper route, so resolving it to
+	// kimi-k2.7-code by name similarity would over-report it.
+	assert.equal(
+		isEmbeddableModelsDevCandidate({
+			trust: MODELS_DEV_PROVIDER_TRUST.reseller,
+			sourceModelId: 'kimi-k2.7-code-nitro',
+			index,
+		}),
+		true,
+	);
+	assert.equal(isTierVariantOfAuthoredModel('kimi-k2.7-code-flex', index), true);
+	// Dotted and dashed spellings name the same base model.
+	assert.equal(isTierVariantOfAuthoredModel('kimi-k2-7-code-highspeed', index), true);
+	// A provider path makes it that provider's entry for the model, not a tier.
+	assert.equal(isTierVariantOfAuthoredModel('moonshotai/kimi-k2.7-code-nitro', index), false);
+	// Unrelated ids that merely share a prefix boundary must not qualify.
+	assert.equal(isTierVariantOfAuthoredModel('kimi-k4-preview', index), false);
+});
+
+void it('drops a tier the author prices itself', () => {
+	// Only one reseller lists claude-opus-5-fast, at 12 USD/Mtok, while Anthropic
+	// publishes its own fast rate of 10. Taking the reseller's markup as the rate
+	// for the tier would over-report it.
+	assert.equal(isTierVariantOfAuthoredModel('claude-opus-5-fast', index), false);
+	assert.equal(
+		isEmbeddableModelsDevCandidate({
+			trust: MODELS_DEV_PROVIDER_TRUST.reseller,
+			sourceModelId: 'claude-opus-5-fast',
 			index,
 		}),
 		false,
