@@ -15,6 +15,7 @@ const BUILD_TIME_PRICING_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/litellm-pricing.json"));
 const BUILD_TIME_MODELS_DEV_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/models-dev-pricing.json"));
+const MODELS_DEV_PROVIDER_TRUST_JSON: &str = include_str!("models-dev-provider-trust.json");
 const FAST_MULTIPLIER_OVERRIDES_JSON: &str = include_str!("fast-multiplier-overrides.json");
 const LITELLM_PRICING_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -126,6 +127,46 @@ struct CompactLiteLlmPricing {
 #[derive(Debug, Deserialize)]
 struct ModelsDevProvider {
     models: FxHashMap<String, ModelsDevModel>,
+}
+
+/// How much a models.dev provider catalog can be trusted to publish list
+/// pricing, generated from the pinned catalog by `just gen-models-dev-pricing`.
+///
+/// models.dev repeats every model once per catalog that serves it, and reseller
+/// catalogs carry their own promotions and markups. The live `api.json` this
+/// loader fetches records no authorship, so the ranking has to be carried in
+/// from generation time.
+#[derive(Debug, Deserialize)]
+struct ModelsDevProviderTrust {
+    /// Catalogs of the providers that author models.
+    owners: Vec<String>,
+    /// Cloud platforms that resell at list price plus a published regional
+    /// premium, and the only source of platform-specific model ids.
+    platforms: Vec<String>,
+}
+
+impl ModelsDevProviderTrust {
+    fn rank(&self, provider_id: &str) -> u8 {
+        if self.owners.iter().any(|owner| owner == provider_id) {
+            return 2;
+        }
+        if self
+            .platforms
+            .iter()
+            .any(|platform| platform == provider_id)
+        {
+            return 1;
+        }
+        0
+    }
+}
+
+fn models_dev_provider_trust() -> &'static ModelsDevProviderTrust {
+    static TRUST: OnceLock<ModelsDevProviderTrust> = OnceLock::new();
+    TRUST.get_or_init(|| {
+        serde_json::from_str(MODELS_DEV_PROVIDER_TRUST_JSON)
+            .expect("parse embedded models-dev-provider-trust.json")
+    })
 }
 
 #[derive(Debug)]
@@ -342,10 +383,23 @@ impl PricingMap {
     fn load_models_dev_json_missing(&mut self, json: &str) -> Option<usize> {
         let raw = parse_models_dev_json(json)?;
         Some(match raw {
-            ModelsDevJson::Providers(providers) => providers
-                .into_values()
-                .map(|provider| self.load_models_dev_models(provider.models))
-                .sum(),
+            ModelsDevJson::Providers(providers) => {
+                let trust = models_dev_provider_trust();
+                let mut ranked: Vec<_> = providers.into_iter().collect();
+                // The first catalog to claim a model id keeps it, so load the
+                // most trustworthy ones first. Sorting by id within a tier keeps
+                // the result from depending on hash iteration order.
+                ranked.sort_by(|(left, _), (right, _)| {
+                    trust
+                        .rank(right)
+                        .cmp(&trust.rank(left))
+                        .then_with(|| left.cmp(right))
+                });
+                ranked
+                    .into_iter()
+                    .map(|(_, provider)| self.load_models_dev_models(provider.models))
+                    .sum()
+            }
             ModelsDevJson::Models(models) => self.load_models_dev_models(models),
         })
     }
@@ -366,6 +420,11 @@ impl PricingMap {
             let Some(output) = cost.output else {
                 continue;
             };
+            // Flat-fee subscription catalogs such as `kimi-for-coding` publish
+            // all-zero token costs, which would report every request as free.
+            if input == 0.0 && output == 0.0 {
+                continue;
+            }
             let input = input / 1_000_000.0;
             let output = output / 1_000_000.0;
             let cache_read_explicit = cost.cache_read.is_some();
@@ -1551,6 +1610,35 @@ mod tests {
     }
 
     #[test]
+    fn offline_prices_models_outside_the_claude_and_moonshot_families() {
+        // The snapshot used to be filtered by a model-name pattern, so families
+        // nobody had added to it were unpriced offline even when models.dev
+        // published them and LiteLLM did not.
+        let pricing = PricingMap::load_embedded();
+        let grok_build = pricing
+            .find("grok-build-0.1")
+            .expect("embedded models.dev should include xAI pricing");
+
+        // Compared per million tokens, which is how models.dev publishes rates.
+        assert!((grok_build.input * 1e6 - 1.0).abs() < 1e-9);
+        assert!((grok_build.output * 1e6 - 2.0).abs() < 1e-9);
+        assert_eq!(pricing.context_limit("grok-build-0.1"), Some(256_000));
+    }
+
+    #[test]
+    fn embedded_models_dev_prices_resold_models_from_their_author() {
+        // models.dev lists kimi-k2.7-code once per catalog that serves it, and
+        // reseller catalogs publish their own promotional rates. Selecting one of
+        // those would undercharge every Kimi report.
+        let pricing = PricingMap::load_embedded();
+        let kimi_k27_code = pricing.find("kimi-k2.7-code").unwrap();
+
+        // MoonshotAI's list rate. Reseller catalogs publish 0.73 and 0.75.
+        assert!((kimi_k27_code.input * 1e6 - 0.95).abs() < 1e-9);
+        assert!((kimi_k27_code.output * 1e6 - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn offline_prices_kimi_k3_from_embedded_models_dev() {
         // LiteLLM may lag new Moonshot releases; offline pricing should still
         // resolve from the embedded models.dev snapshot (see #1462).
@@ -1934,6 +2022,65 @@ mod tests {
         assert_eq!(pricing.context_limit("gpt-fallback"), Some(456));
         assert!((alias.input - 4e-6).abs() < f64::EPSILON);
         assert_eq!(pricing.context_limits.get("gpt-alias"), Some(&654));
+    }
+
+    #[test]
+    fn live_models_dev_pricing_prefers_the_authoring_catalog_over_resellers() {
+        // The same model id appears in every catalog that serves it, and the
+        // first one loaded keeps it. Reseller rates are their own, so loading a
+        // reseller before the author would bill at a promotional price.
+        // `302ai` sorts before `moonshotai`, so an id-only ordering would pick a
+        // reseller here.
+        let json = r#"{
+                "302ai": {
+                    "models": {
+                        "kimi-k2.7-code": {
+                            "cost": { "input": 0.6, "output": 3.0 }
+                        }
+                    }
+                },
+                "openrouter": {
+                    "models": {
+                        "kimi-k2.7-code": {
+                            "cost": { "input": 0.73, "output": 3.5 }
+                        }
+                    }
+                },
+                "moonshotai": {
+                    "models": {
+                        "kimi-k2.7-code": {
+                            "cost": { "input": 0.95, "output": 4.0 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        // One entry loaded, not three: the reseller duplicates are skipped
+        // because the authoring catalog claimed the id first.
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(1));
+        let kimi = pricing.find_exact("kimi-k2.7-code").unwrap();
+        assert!((kimi.input * 1e6 - 0.95).abs() < 1e-9);
+        assert!((kimi.output * 1e6 - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn live_models_dev_pricing_skips_flat_fee_catalogs() {
+        // `kimi-for-coding` is a subscription plan, so it publishes zero token
+        // costs. Loading it would make the model free for everyone.
+        let json = r#"{
+                "kimi-for-coding": {
+                    "models": {
+                        "kimi-for-coding": {
+                            "cost": { "input": 0, "output": 0 }
+                        }
+                    }
+                }
+            }"#;
+        let mut pricing = PricingMap::default();
+
+        assert_eq!(pricing.load_models_dev_json_missing(json), Some(0));
+        assert!(pricing.find_exact("kimi-for-coding").is_none());
     }
 
     #[test]

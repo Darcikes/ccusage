@@ -8,7 +8,11 @@ neither has a consumer outside it.
 ## Owns
 
 - `pricing.rs` — the `PricingMap`, the embedded models.dev and LiteLLM snapshots,
-  the built-in rate tables, and the optional runtime fetch.
+  the built-in rate tables, and the optional runtime fetch. models.dev repeats
+  every model once per catalog that serves it, so
+  `models-dev-provider-trust.json` records which catalogs author models and
+  which only resell them; both the snapshot and the runtime fetch take the
+  authoring catalog's rates over a reseller's promotional ones.
 - `cost.rs` — cost calculation and missing-pricing detection.
 - `summary.rs`, `agent_report.rs`, `output.rs` — row aggregation, period labels,
   JSON shaping, and table rendering.
