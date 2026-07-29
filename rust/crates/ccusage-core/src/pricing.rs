@@ -179,15 +179,18 @@ impl ModelsDevCatalogRules {
         let Some(modalities) = modalities else {
             return true;
         };
-        if let Some(output) = modalities.output.as_deref() {
-            if !output.is_empty() && !(output.len() == 1 && output[0] == "text") {
-                return false;
-            }
-        }
-        match modalities.input.as_deref() {
-            Some(input) if !input.is_empty() => input.iter().any(|modality| modality == "text"),
-            _ => true,
-        }
+        // An absent or empty list says nothing about the model, so it reads as
+        // plain text rather than disqualifying the entry.
+        let text_only_output = match modalities.output.as_deref() {
+            Some([single]) => single == "text",
+            Some([]) | None => true,
+            Some(_) => false,
+        };
+        let accepts_text = match modalities.input.as_deref() {
+            Some([]) | None => true,
+            Some(input) => input.iter().any(|modality| modality == "text"),
+        };
+        text_only_output && accepts_text
     }
 }
 
