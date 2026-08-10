@@ -333,6 +333,7 @@ pub(crate) fn run_statusline(args: StatuslineArgs) -> Result<()> {
         serde_json::from_str(stdin.trim()).context("Invalid input format")?;
     let shared = SharedArgs {
         offline: args.offline && !args.no_offline,
+        pricing_overrides: args.pricing_overrides.clone(),
         ..SharedArgs::default()
     };
     let cache_enabled = args.cache && !args.no_cache;
