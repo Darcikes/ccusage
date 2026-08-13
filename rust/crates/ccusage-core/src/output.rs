@@ -487,7 +487,14 @@ pub fn format_number(value: u64) -> String {
 }
 
 pub fn format_currency(value: f64) -> String {
-    format!("${value:.2}")
+    // CCUSAGE_CNY_RATE: USD→CNY display rate (local-only convenience; upstream builds ignore it)
+    match std::env::var("CCUSAGE_CNY_RATE")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+    {
+        Some(rate) => format!("¥{:.2}", value * rate),
+        None => format!("${value:.2}"),
+    }
 }
 
 pub fn strip_cost_json(value: &mut Value) {

@@ -860,6 +860,10 @@ fn report_title_uses_detected_agents_even_when_filtered_rows_are_sparse() {
 
 #[test]
 fn all_table_rows_match_main_agent_breakdown_display() {
+    // CCUSAGE_CNY_RATE is a local display preference that may be injected by the
+    // developer environment; keep this test independent of it.
+    // SAFETY: no other test reads CCUSAGE_CNY_RATE, so removal cannot race.
+    unsafe { std::env::remove_var("CCUSAGE_CNY_RATE") };
     let row = AllRow {
         period: "2026-01-02".to_string(),
         agent: "all",
