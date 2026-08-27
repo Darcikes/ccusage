@@ -2,6 +2,7 @@ mod adapter;
 mod blocks;
 mod cli;
 mod commands;
+mod deepseek_balance;
 mod http;
 
 pub(crate) use adapter::claude::{load_daily_summaries, load_entries};

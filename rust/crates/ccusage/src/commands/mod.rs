@@ -333,6 +333,7 @@ pub(crate) fn run_statusline(args: StatuslineArgs) -> Result<()> {
         serde_json::from_str(stdin.trim()).context("Invalid input format")?;
     let shared = SharedArgs {
         offline: args.offline && !args.no_offline,
+        pricing_overrides: args.pricing_overrides.clone(),
         ..SharedArgs::default()
     };
     let cache_enabled = args.cache && !args.no_cache;
@@ -533,7 +534,7 @@ fn render_statusline(
     let model_label = resolve_model_label(&args.model_label_aliases, &hook.model.display_name);
     let model_segment = format_model_segment(model_label, hook.effort.as_ref());
 
-    Ok(format!(
+    let mut statusline = format!(
         "🤖 {} | 💰 {} session / {} today / {}{} | 🧠 {}",
         model_segment,
         session_display,
@@ -541,7 +542,14 @@ fn render_statusline(
         block_info,
         burn_rate_info,
         context_info.unwrap_or_else(|| "N/A".to_string())
-    ))
+    );
+    if let Some(segment) = crate::deepseek_balance::balance_segment(
+        hook.model.id.as_deref().unwrap_or_default(),
+        crate::deepseek_balance::fetch_balance,
+    ) {
+        statusline.push_str(&format!(" | {segment}"));
+    }
+    Ok(statusline)
 }
 
 fn statusline_today_shared(
