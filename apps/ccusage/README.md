@@ -186,6 +186,44 @@ bunx ccusage monthly --compact  # Compact monthly report
 - 🌍 **Timezone Support**: Configure timezone for date grouping with `--timezone` option
 - ⚙️ **Configuration Files**: Set defaults with JSON configuration files, complete with IDE autocomplete and validation
 
+## Local Features (fork)
+
+Local-only additions maintained in this fork. They do not affect upstream builds.
+
+### CNY Display
+
+Costs are shown as `¥` when `CCUSAGE_CNY_RATE` is set (USD→CNY display rate); otherwise `$`.
+
+- Env: `CCUSAGE_CNY_RATE` (e.g. `7.14`), optional — omit to keep `$`
+
+### DeepSeek Balance in Statusline
+
+When the active session model is a DeepSeek model (`deepseek-chat`, `deepseek-reasoner`, or any
+model id containing `deepseek`), the statusline appends the account balance:
+` | 💰 ¥110.00`. Below the warning threshold it renders ` | ⚠️ ¥5.00` in red. Non-DeepSeek
+sessions, missing API keys, and query failures (API down, invalid key) hide the segment entirely —
+the statusline never errors because of balance lookup.
+
+- Env: `DEEPSEEK_API_KEY` (required to enable), `DEEPSEEK_BALANCE_CACHE_TTL` (seconds between
+  balance API calls, default `3600` = 1h), `DEEPSEEK_BALANCE_WARN` (CNY warning threshold,
+  default `20`)
+- The balance result is cached per API call (TTL above); failures are throttled with the same TTL
+  so an API outage does not hammer the endpoint.
+
+Claude Code statusline setup (add the `env` entries to `~/.claude/settings.json`):
+
+```json
+{
+  "statusLine": { "type": "command", "command": "ccusage statusline" },
+  "env": {
+    "DEEPSEEK_API_KEY": "sk-...",
+    "DEEPSEEK_BALANCE_CACHE_TTL": "3600",
+    "DEEPSEEK_BALANCE_WARN": "20",
+    "CCUSAGE_CNY_RATE": "7.14"
+  }
+}
+```
+
 ## Documentation
 
 Full documentation is available at **[ccusage.com](https://ccusage.com/)**
