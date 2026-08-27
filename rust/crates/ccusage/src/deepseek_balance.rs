@@ -48,23 +48,34 @@ fn cache_path() -> PathBuf {
         .join("deepseek_balance.json")
 }
 
-fn read_cache(path: &PathBuf) -> Option<(u64, f64)> {
-    let bytes = std::fs::read(path).ok()?;
-    #[derive(serde::Deserialize)]
-    struct Cache {
-        fetched_at_ms: u64,
-        balance_cny: f64,
-    }
-    let cache: Cache = serde_json::from_slice(&bytes).ok()?;
-    Some((cache.fetched_at_ms, cache.balance_cny))
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Debug)]
+struct BalanceCache {
+    fetched_at_ms: u64,
+    balance_cny: Option<f64>,
+    #[serde(default)]
+    failed_at_ms: Option<u64>,
 }
 
-fn write_cache(path: &PathBuf, fetched_at_ms: u64, balance_cny: f64) {
+fn read_cache(path: &PathBuf) -> Option<BalanceCache> {
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn write_cache(
+    path: &PathBuf,
+    fetched_at_ms: u64,
+    balance_cny: Option<f64>,
+    failed_at_ms: Option<u64>,
+) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let payload = serde_json::json!({ "fetched_at_ms": fetched_at_ms, "balance_cny": balance_cny });
-    let _ = std::fs::write(path, serde_json::to_vec(&payload).unwrap_or_default());
+    let cache = BalanceCache {
+        fetched_at_ms,
+        balance_cny,
+        failed_at_ms,
+    };
+    let _ = std::fs::write(path, serde_json::to_vec(&cache).unwrap_or_default());
 }
 
 pub(crate) fn fetch_balance(api_key: &str) -> Result<f64, String> {
@@ -108,14 +119,21 @@ pub(crate) fn balance_segment(
     let now_ms = now_millis();
     let path = cache_path();
     let cached = read_cache(&path);
-    let balance = match cached {
-        Some((fetched_at, balance)) if cache_fresh(fetched_at, now_ms, ttl_ms) => Some(balance),
+    // 有失败标记用 failed_at_ms 节流重试,否则用 fetched_at_ms(原逻辑)
+    let balance = match cached.as_ref() {
+        Some(cache) if cache_fresh(cache.failed_at_ms.unwrap_or(cache.fetched_at_ms), now_ms, ttl_ms) => {
+            cache.balance_cny
+        }
         _ => match fetch(&api_key) {
             Ok(balance) => {
-                write_cache(&path, now_ms, balance);
+                write_cache(&path, now_ms, Some(balance), None);
                 Some(balance)
             }
-            Err(_) => cached.map(|(_, balance)| balance), // 降级:旧缓存兜底
+            Err(_) => {
+                let stale = cached.as_ref().and_then(|cache| cache.balance_cny);
+                write_cache(&path, now_ms, stale, Some(now_ms)); // 失败也写缓存,节流期内不重试
+                stale
+            }
         },
     };
     balance.map(|value| format_balance(value, warn_threshold))
@@ -124,6 +142,11 @@ pub(crate) fn balance_segment(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+    use std::sync::Mutex;
+
+    // 写同一缓存文件(cache_path)的测试共用此锁,避免并行互踩
+    static CACHE_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn deepseek_model_detection() {
@@ -178,6 +201,7 @@ mod tests {
         // SAFETY: no other test reads these vars, so removal cannot race.
         unsafe { std::env::remove_var("DEEPSEEK_BALANCE_CACHE_TTL") };
         unsafe { std::env::remove_var("DEEPSEEK_BALANCE_WARN") };
+        let _cache = CACHE_LOCK.lock().unwrap();
         let path = cache_path();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let payload = serde_json::json!({
@@ -198,8 +222,71 @@ mod tests {
         // 唯一临时路径,避免与 segment_uses_fresh_cache_without_network 并行时互踩真实缓存文件
         let path = std::env::temp_dir().join(format!("ccusage-balance-test-{}", std::process::id()));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        write_cache(&path, 1_234, 88.5);
-        assert_eq!(read_cache(&path), Some((1_234, 88.5)));
+        write_cache(&path, 1_234, Some(88.5), Some(5_678));
+        assert_eq!(
+            read_cache(&path),
+            Some(BalanceCache {
+                fetched_at_ms: 1_234,
+                balance_cny: Some(88.5),
+                failed_at_ms: Some(5_678),
+            })
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn failure_writes_cache_and_throttles_retries() {
+        // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
+        let _key = ccusage_test_support::EnvVarGuard::set("DEEPSEEK_API_KEY", "test-key");
+        // SAFETY: no other test reads these vars, so removal cannot race.
+        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_CACHE_TTL") };
+        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_WARN") };
+        let _cache = CACHE_LOCK.lock().unwrap();
+        let path = cache_path();
+        std::fs::remove_file(&path).ok();
+        let calls = Cell::new(0);
+        let fetch = |_api_key: &str| {
+            calls.set(calls.get() + 1);
+            Err("network down".to_string())
+        };
+        // 无旧值可显示 → 隐藏
+        assert_eq!(balance_segment("deepseek-chat", fetch), None);
+        assert_eq!(calls.get(), 1);
+        // 失败标记已写盘,TTL 内第二次调用不重试
+        assert!(read_cache(&path).is_some_and(|c| c.failed_at_ms.is_some()));
+        assert_eq!(balance_segment("deepseek-chat", fetch), None);
+        assert_eq!(calls.get(), 1);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn failure_keeps_showing_stale_balance() {
+        // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
+        let _key = ccusage_test_support::EnvVarGuard::set("DEEPSEEK_API_KEY", "test-key");
+        // SAFETY: no other test reads these vars, so removal cannot race.
+        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_CACHE_TTL") };
+        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_WARN") };
+        let _cache = CACHE_LOCK.lock().unwrap();
+        let path = cache_path();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // 过期的成功缓存(纪元后 1s,距今远超默认 TTL)→ 尝试 fetch → 失败 → 显示旧值
+        write_cache(&path, 1_000, Some(88.5), None);
+        let calls = Cell::new(0);
+        let fetch = |_api_key: &str| {
+            calls.set(calls.get() + 1);
+            Err("network down".to_string())
+        };
+        assert_eq!(
+            balance_segment("deepseek-chat", fetch),
+            Some("💰 ¥88.50".to_string())
+        );
+        assert_eq!(calls.get(), 1);
+        // 失败节流期内持续显示陈旧值
+        assert_eq!(
+            balance_segment("deepseek-chat", fetch),
+            Some("💰 ¥88.50".to_string())
+        );
+        assert_eq!(calls.get(), 1);
         std::fs::remove_file(&path).ok();
     }
 }
