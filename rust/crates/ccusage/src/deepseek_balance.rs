@@ -87,7 +87,7 @@ fn fetch_balance(api_key: &str) -> Result<f64, String> {
     parse_balance(&body).ok_or_else(|| "invalid balance response".to_string())
 }
 
-fn balance_segment(model_id: &str) -> Option<String> {
+fn balance_segment(model_id: &str, fetch: impl Fn(&str) -> Result<f64, String>) -> Option<String> {
     if !is_deepseek_model(model_id) {
         return None;
     }
@@ -107,7 +107,7 @@ fn balance_segment(model_id: &str) -> Option<String> {
     let cached = read_cache(&path);
     let balance = match cached {
         Some((fetched_at, balance)) if cache_fresh(fetched_at, now_ms, ttl_ms) => Some(balance),
-        _ => match fetch_balance(&api_key) {
+        _ => match fetch(&api_key) {
             Ok(balance) => {
                 write_cache(&path, now_ms, balance);
                 Some(balance)
@@ -162,7 +162,10 @@ mod tests {
 
     #[test]
     fn segment_skipped_for_non_deepseek_model() {
-        assert_eq!(balance_segment("claude-opus-4-5"), None);
+        assert_eq!(
+            balance_segment("claude-opus-4-5", |_| panic!("fetch must not be called")),
+            None
+        );
     }
 
     #[test]
@@ -175,12 +178,15 @@ mod tests {
         let path = cache_path();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let payload = serde_json::json!({
-            "fetched_at_ms": 1_000,
+            "fetched_at_ms": now_millis(),
             "balance_cny": 110.0
         });
         std::fs::write(&path, serde_json::to_vec(&payload).unwrap()).unwrap();
-        // 默认 ttl=3600s,1_000ms 距今远小于 TTL → 缓存新鲜,不会发网络请求
-        assert_eq!(balance_segment("deepseek-chat"), Some("💰 ¥110.00".to_string()));
+        // 默认 ttl=3600s,刚写入的时间戳 → 缓存恒新鲜;panic 闭包结构性证明不发网络
+        assert_eq!(
+            balance_segment("deepseek-chat", |_| panic!("fetch must not be called")),
+            Some("💰 ¥110.00".to_string())
+        );
         std::fs::remove_file(&path).ok();
     }
 
