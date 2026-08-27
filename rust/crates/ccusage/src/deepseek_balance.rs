@@ -67,7 +67,7 @@ fn write_cache(path: &PathBuf, fetched_at_ms: u64, balance_cny: f64) {
     let _ = std::fs::write(path, serde_json::to_vec(&payload).unwrap_or_default());
 }
 
-fn fetch_balance(api_key: &str) -> Result<f64, String> {
+pub(crate) fn fetch_balance(api_key: &str) -> Result<f64, String> {
     let agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(BALANCE_FETCH_TIMEOUT_SECONDS)))
         .build()
@@ -87,7 +87,10 @@ fn fetch_balance(api_key: &str) -> Result<f64, String> {
     parse_balance(&body).ok_or_else(|| "invalid balance response".to_string())
 }
 
-fn balance_segment(model_id: &str, fetch: impl Fn(&str) -> Result<f64, String>) -> Option<String> {
+pub(crate) fn balance_segment(
+    model_id: &str,
+    fetch: impl Fn(&str) -> Result<f64, String>,
+) -> Option<String> {
     if !is_deepseek_model(model_id) {
         return None;
     }
