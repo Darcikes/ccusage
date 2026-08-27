@@ -26,6 +26,7 @@ ccusage-adapter-copilot = { path = "adapters/copilot" }
 ccusage-adapter-droid = { path = "adapters/droid" }
 ccusage-adapter-gemini = { path = "adapters/gemini" }
 ccusage-adapter-goose = { path = "adapters/goose" }
+ccusage-adapter-grok = { path = "adapters/grok" }
 ccusage-adapter-hermes = { path = "adapters/hermes" }
 ccusage-adapter-kilo = { path = "adapters/kilo" }
 ccusage-adapter-kimi = { path = "adapters/kimi" }
@@ -49,6 +50,9 @@ jiff = { version = "0.2.35", default-features = false, features = [
 	"tzdb-bundle-platform",
 ] }
 memchr = "2.8.3"
+# Inflate-only consumer of the deflated pricing snapshots build.rs embeds; the
+# compression side is a build-dependency of ccusage-core.
+miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
 mimalloc = "0.1.52"
 minreq = { version = "3.0.0", default-features = false, features = ["https-rustls"] }
 rustc-hash = "2.1.3"
@@ -59,7 +63,7 @@ smallvec = "1.15.2"
 sqlite = { version = "0.37.0", default-features = false, features = ["bundled", "linkage"] }
 terminal_size = "0.4.4"
 unicode-width = "0.2.2"
-ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
+ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
 
 [profile.release]
 codegen-units = 1
