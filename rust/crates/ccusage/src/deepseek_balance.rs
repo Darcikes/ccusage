@@ -102,16 +102,26 @@ pub(crate) fn balance_segment(
     model_id: &str,
     fetch: impl Fn(&str) -> Result<f64, String>,
 ) -> Option<String> {
+    // 总开关:仅 CCUSAGE_BALANCE_ENABLED=true(忽略大小写)时启用;缺省或 false → 静默关闭
+    let enabled = std::env::var("CCUSAGE_BALANCE_ENABLED")
+        .map(|value| value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if !enabled {
+        return None;
+    }
     if !is_deepseek_model(model_id) {
         return None;
     }
-    let api_key = std::env::var("DEEPSEEK_API_KEY").ok()?;
-    let ttl_ms = std::env::var("DEEPSEEK_BALANCE_CACHE_TTL")
+    // 多账户:优先用 ANTHROPIC_AUTH_TOKEN(alias 注入的当前账户 key),DEEPSEEK_API_KEY 回退
+    let api_key = std::env::var("ANTHROPIC_AUTH_TOKEN")
+        .or_else(|_| std::env::var("DEEPSEEK_API_KEY"))
+        .ok()?;
+    let ttl_ms = std::env::var("CCUSAGE_BALANCE_CACHE_TTL")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(3600)
         .saturating_mul(1000);
-    let warn_threshold = std::env::var("DEEPSEEK_BALANCE_WARN")
+    let warn_threshold = std::env::var("CCUSAGE_BALANCE_WARN")
         .ok()
         .and_then(|value| value.parse::<f64>().ok())
         .unwrap_or(20.0);
@@ -188,6 +198,8 @@ mod tests {
 
     #[test]
     fn segment_skipped_for_non_deepseek_model() {
+        // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "true");
         assert_eq!(
             balance_segment("claude-opus-4-5", |_| panic!("fetch must not be called")),
             None
@@ -195,13 +207,65 @@ mod tests {
     }
 
     #[test]
+    fn segment_prefers_anthropic_auth_token() {
+        // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "true");
+        // SAFETY: no other test reads these vars, so removal cannot race.
+        unsafe { std::env::set_var("ANTHROPIC_AUTH_TOKEN", "anthropic-key") };
+        unsafe { std::env::set_var("DEEPSEEK_API_KEY", "deepseek-key") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_CACHE_TTL") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_WARN") };
+        let _cache = CACHE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path = cache_path();
+        std::fs::remove_file(&path).ok();
+        let seen = Cell::new(None);
+        let fetch = |key: &str| {
+            seen.replace(Some(key.to_string()));
+            Ok(88.5)
+        };
+        assert_eq!(
+            balance_segment("deepseek-chat", fetch),
+            Some("💰 ¥88.50".to_string())
+        );
+        // 两个 key 都存在时,传给 fetch 的必须是 ANTHROPIC_AUTH_TOKEN
+        assert_eq!(seen.replace(None).as_deref(), Some("anthropic-key"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn segment_disabled_when_switch_off() {
+        // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "false");
+        // 开关关:即使有 key + deepseek 模型,也不请求、不显示(开关短路,不读 key)
+        assert_eq!(
+            balance_segment("deepseek-chat", |_| panic!("fetch must not be called")),
+            None
+        );
+    }
+
+    #[test]
+    fn segment_disabled_when_switch_missing() {
+        // 缺省开关 = 关闭。并行下无法可靠 remove_var(会删掉其他测试 guard 设的值),
+        // 用 guard 设空值模拟"未开启":与缺省一样走 unwrap_or(false) → 不请求、不显示
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "");
+        assert_eq!(
+            balance_segment("deepseek-chat", |_| panic!("fetch must not be called")),
+            None
+        );
+    }
+
+    #[test]
     fn segment_uses_fresh_cache_without_network() {
         // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
-        let _key = ccusage_test_support::EnvVarGuard::set("DEEPSEEK_API_KEY", "test-key");
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "true");
         // SAFETY: no other test reads these vars, so removal cannot race.
-        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_CACHE_TTL") };
-        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_WARN") };
-        let _cache = CACHE_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("DEEPSEEK_API_KEY", "test-key") };
+        // ANTHROPIC_AUTH_TOKEN 优先于 DEEPSEEK_API_KEY:显式清掉,防止外部 token 污染本测试
+        unsafe { std::env::remove_var("ANTHROPIC_AUTH_TOKEN") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_CACHE_TTL") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_WARN") };
+        // 锁内断言失败会毒化锁:空元组锁无数据,毒化无害,直接接管
+        let _cache = CACHE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let path = cache_path();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let payload = serde_json::json!({
@@ -237,11 +301,15 @@ mod tests {
     #[test]
     fn failure_writes_cache_and_throttles_retries() {
         // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
-        let _key = ccusage_test_support::EnvVarGuard::set("DEEPSEEK_API_KEY", "test-key");
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "true");
         // SAFETY: no other test reads these vars, so removal cannot race.
-        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_CACHE_TTL") };
-        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_WARN") };
-        let _cache = CACHE_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("DEEPSEEK_API_KEY", "test-key") };
+        // ANTHROPIC_AUTH_TOKEN 优先于 DEEPSEEK_API_KEY:显式清掉,防止外部 token 污染本测试
+        unsafe { std::env::remove_var("ANTHROPIC_AUTH_TOKEN") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_CACHE_TTL") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_WARN") };
+        // 锁内断言失败会毒化锁:空元组锁无数据,毒化无害,直接接管
+        let _cache = CACHE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let path = cache_path();
         std::fs::remove_file(&path).ok();
         let calls = Cell::new(0);
@@ -262,11 +330,15 @@ mod tests {
     #[test]
     fn failure_keeps_showing_stale_balance() {
         // EnvVarGuard holds a non-reentrant global mutex: at most one per test.
-        let _key = ccusage_test_support::EnvVarGuard::set("DEEPSEEK_API_KEY", "test-key");
+        let _enabled = ccusage_test_support::EnvVarGuard::set("CCUSAGE_BALANCE_ENABLED", "true");
         // SAFETY: no other test reads these vars, so removal cannot race.
-        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_CACHE_TTL") };
-        unsafe { std::env::remove_var("DEEPSEEK_BALANCE_WARN") };
-        let _cache = CACHE_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("DEEPSEEK_API_KEY", "test-key") };
+        // ANTHROPIC_AUTH_TOKEN 优先于 DEEPSEEK_API_KEY:显式清掉,防止外部 token 污染本测试
+        unsafe { std::env::remove_var("ANTHROPIC_AUTH_TOKEN") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_CACHE_TTL") };
+        unsafe { std::env::remove_var("CCUSAGE_BALANCE_WARN") };
+        // 锁内断言失败会毒化锁:空元组锁无数据,毒化无害,直接接管
+        let _cache = CACHE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let path = cache_path();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         // 过期的成功缓存(纪元后 1s,距今远超默认 TTL)→ 尝试 fetch → 失败 → 显示旧值
